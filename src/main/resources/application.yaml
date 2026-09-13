@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: market-app
+
+app:
+  uploadsDir: ${java.io.tmpdir}/yandex-blog-uploads/
+
+
