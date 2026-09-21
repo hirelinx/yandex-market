@@ -3,7 +3,3 @@ spring:
     url: jdbc:h2:file:${java.io.tmpdir}/test
     username: sa
     password:
-    driver-class-name: org.h2.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update

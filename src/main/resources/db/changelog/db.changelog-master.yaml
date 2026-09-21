@@ -1,0 +1,4 @@
+databaseChangeLog:
+  - include:
+      file: 2026/09/21-01-changelog.xml
+      relativeToChangelogFile: true
