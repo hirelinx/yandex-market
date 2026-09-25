@@ -1,92 +1,105 @@
 package ru.yandex.practicum.market.service;
 
 import lombok.AllArgsConstructor;
+import lombok.NonNull;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.yandex.practicum.market.dto.ItemDto;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
 import ru.yandex.practicum.market.mapper.ItemMapper;
 import ru.yandex.practicum.market.model.Cart;
+import ru.yandex.practicum.market.model.CartCountedItems;
 import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.model.Item;
+import ru.yandex.practicum.market.repository.CartCountedItemsRepository;
 import ru.yandex.practicum.market.repository.CartRepository;
 import ru.yandex.practicum.market.repository.CountedItemRepository;
 import ru.yandex.practicum.market.repository.ItemRepository;
-
-import java.util.List;
 
 @Service
 @AllArgsConstructor
 public class CartServiceImpl implements CartService {
     private final CartRepository cartRepository;
     private final ItemMapper itemMapper;
-    CountedItemRepository countedItemRepository;
-    ItemRepository itemRepository;
+    private final CartCountedItemsRepository cartCountedItemsRepository;
+    private final CountedItemRepository countedItemRepository;
+    private final ItemRepository itemRepository;
 
     @Override
-    public boolean addToCart(long itemId) {
+    public Mono<Boolean> addToCart(long itemId) {
         var cart = retrieveCartEntity();
-        var optCartItem = findInCart(cart, itemId);
+        var existingCartItem = cart.flatMap(it -> findInCart(it, itemId));
 
-        return optCartItem.map(cartItem -> {
-            cartItem.setCount(cartItem.getCount() + 1);
-            countedItemRepository.save(cartItem);
-            return false;
-        }).orElseGet(() -> {
-            var optItem = itemRepository.findById(itemId);
-            if (optItem.isEmpty()) {
-                var itemCriteria = new Item();
-                itemCriteria.setId(itemId);
-                throw new EntityNotFoundException(itemCriteria);
-            }
-
-            var cartItem = new CountedItem(optItem.get());
-            cart.getCountedItems().add(cartItem);
-            countedItemRepository.save(cartItem);
-            cartRepository.save(cart);
-
-            return true;
-        });
+        return existingCartItem
+                .flatMap(cartItem -> {
+                    cartItem.setCount(cartItem.getCount() + 1);
+                    return countedItemRepository.save(cartItem).thenReturn(false);
+                })
+                .switchIfEmpty(
+                        cart.flatMap(c ->
+                                itemRepository.findById(itemId)
+                                        .switchIfEmpty(Mono.defer(() -> {
+                                            var item = new Item();
+                                            item.setId(itemId);
+                                            return Mono.error(new EntityNotFoundException(item));
+                                        }))
+                                        .flatMap(item -> countedItemRepository.save(new CountedItem(itemId))
+                                                .flatMap(saved -> cartCountedItemsRepository.save(
+                                                        new CartCountedItems(c.getId(), saved.getId())
+                                                ).thenReturn(true)))
+                        )
+                );
     }
 
     @Override
-    public boolean removeFromCart(long itemId) {
+    public Mono<@NonNull Boolean> removeFromCart(long itemId) {
         var cart = retrieveCartEntity();
-        var optCartItem = findInCart(cart, itemId);
+        var optCartItem = cart.flatMap(it -> findInCart(it, itemId));
 
-        return optCartItem.map(cartItem -> {
+        return optCartItem.flatMap(cartItem -> {
             if (cartItem.getCount() == 0) {
-                return false;
+                return Mono.just(false);
             }
 
             cartItem.setCount(cartItem.getCount() - 1);
 
             if (cartItem.getCount() == 0) {
-                cart.getCountedItems().remove(cartItem);
-                cartRepository.save(cart);
-                countedItemRepository.delete(cartItem);
-                return false;
+
+                return cartCountedItemsRepository.deleteCartCountedItemsByCountedItemsId(cartItem.getId())
+                        .then(countedItemRepository.delete(cartItem))
+                        .then(Mono.just(false));
             }
 
-            countedItemRepository.save(cartItem);
-            return true;
-        }).orElse(false);
+            return countedItemRepository.save(cartItem).then(Mono.just(true));
+        }).switchIfEmpty(Mono.just(false));
     }
 
-    private static java.util.Optional<CountedItem> findInCart(Cart cart, long itemId) {
-        return cart.getCountedItems().stream()
-                .filter(cartItem -> cartItem.getItem().getId().equals(itemId))
-                .findFirst();
-    }
-
-    @Override
-    public Cart retrieveCartEntity() {
-        return cartRepository.findAll().getFirst();
+    private Mono<CountedItem> findInCart(Cart cart, long itemId) {
+        return getCountedItems(cart)
+                .filter(cartItem -> cartItem.getItemId() != null && cartItem.getItemId() == itemId)
+                .next();
     }
 
     @Override
-    public List<ItemDto> retrieveItems() {
+    public Flux<@NonNull CountedItem> getCountedItems(Cart cart) {
+        return cartCountedItemsRepository.findByCartId(cart.getId())
+                .flatMap(link -> countedItemRepository.findById(link.getCountedItemsId()));
+    }
+
+    @Override
+    public Mono<@NonNull Cart> retrieveCartEntity() {
+        return cartRepository.findFirstBy();
+    }
+
+    @Override
+    public Flux<@NonNull ItemDto> retrieveItems() {
         var cart = retrieveCartEntity();
 
-        return cart.getCountedItems().stream().map(itemMapper::toDto).toList();
+        var items = cart.flatMapMany(this::getCountedItems);
+
+        return items.flatMap(countedItem -> itemRepository.findById(countedItem.getItemId())
+                .map(item -> itemMapper.toDto(item, countedItem.getCount())));
     }
 }
