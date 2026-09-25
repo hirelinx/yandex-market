@@ -1,6 +1,6 @@
 # YandexBlog — бэкенд
 
-Классический сайт-монолит для магазина на Spring Boot 3. Данные хранятся в H2, изображения товаров — в локальной директории.
+Реактивный сайт-монолит для магазина на Spring Boot 4. Данные хранятся в H2, изображения товаров — в локальной директории.
 
 ## Требования
 
@@ -38,7 +38,7 @@ docker compose up
 
 ### Профиль `dev` (локальная разработка)
 
-h2-база: `${java.io.tmpdir}/test`  
+h2-база: `${java.io.tmpdir}/market`  
 Директория для изображений: `${java.io.tmpdir}/yandex-blog-uploads/`
 
 Или из JAR:
@@ -51,14 +51,14 @@ java -jar build/libs/yandex-blog-1.0-SNAPSHOT.jar --spring.profiles.active=dev
 
 Параметры подключения к БД задаются переменными окружения:
 
-| Переменная | Описание |
-|---|---|
-| `DB_URL` | JDBC URL |
+| Переменная | Описание         |
+|---|------------------|
+| `DB_URL` | R2DBC URL        |
 | `DB_USER` | Имя пользователя |
-| `DB_PASS` | Пароль |
+| `DB_PASS` | Пароль           |
 
 ```bash
-export DB_URL=jdbc:sqlite:/path/to/database.sqlite
+export DB_URL=r2dbc:sqlite:/path/to/database.sqlite
 export DB_USER=
 export DB_PASS=
 
