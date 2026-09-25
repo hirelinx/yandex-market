@@ -2,16 +2,15 @@ package ru.yandex.practicum.market.repository;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.data.r2dbc.test.autoconfigure.DataR2dbcTest;
 import org.springframework.test.context.ActiveProfiles;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.market.support.TestEntityFactory;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-@DataJpaTest
+@DataR2dbcTest
 @ActiveProfiles("test")
 class CountedItemRepositoryTest {
     @Autowired
@@ -20,23 +19,26 @@ class CountedItemRepositoryTest {
     private CountedItemRepository countedItemRepository;
 
     @Test
-    void findFirstByItem_Id() {
-        var item = itemRepository.save(TestEntityFactory.item("Сыр", BigDecimal.valueOf(200)));
-        var countedItem = countedItemRepository.save(TestEntityFactory.countedItem(item, 3L));
-
-        assertThat(countedItemRepository.findFirstByItem_Id(item.getId()))
-                .contains(countedItem);
+    void findFirstByItemId() {
+        StepVerifier.create(
+                        itemRepository.save(TestEntityFactory.item("Сыр", BigDecimal.valueOf(200)))
+                                .flatMap(item -> countedItemRepository.save(TestEntityFactory.countedItem(item.getId(), 3L)))
+                                .flatMap(countedItem -> countedItemRepository.findFirstByItemId(countedItem.getItemId()))
+                )
+                .expectNextMatches(found -> found.getCount() == 3L)
+                .verifyComplete();
     }
 
     @Test
-    void findAllByItem_IdIn() {
-        var first = itemRepository.save(TestEntityFactory.item("Сыр", BigDecimal.valueOf(200)));
-        var second = itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE));
-        countedItemRepository.save(TestEntityFactory.countedItem(first, 1L));
-        countedItemRepository.save(TestEntityFactory.countedItem(second, 2L));
-
-        var result = countedItemRepository.findAllByItem_IdIn(List.of(first.getId(), second.getId()));
-
-        assertThat(result).hasSize(2);
+    void findAllByItemIdIn() {
+        StepVerifier.create(
+                        itemRepository.save(TestEntityFactory.item("Сыр", BigDecimal.valueOf(200)))
+                                .flatMapMany(first -> itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE))
+                                        .flatMapMany(second -> countedItemRepository.save(TestEntityFactory.countedItem(first.getId(), 1L))
+                                                .then(countedItemRepository.save(TestEntityFactory.countedItem(second.getId(), 2L)))
+                                                .thenMany(countedItemRepository.findAllByItemIdIn(List.of(first.getId(), second.getId())))))
+                )
+                .expectNextCount(2)
+                .verifyComplete();
     }
 }
