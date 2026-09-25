@@ -2,40 +2,34 @@ package ru.yandex.practicum.market.repository;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.data.r2dbc.test.autoconfigure.DataR2dbcTest;
 import org.springframework.test.context.ActiveProfiles;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.market.model.Order;
-import ru.yandex.practicum.market.support.TestEntityFactory;
 
-import java.math.BigDecimal;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-@DataJpaTest
+@DataR2dbcTest
 @ActiveProfiles("test")
 class OrderRepositoryTest {
-    @Autowired
-    private ItemRepository itemRepository;
-    @Autowired
-    private CountedItemRepository countedItemRepository;
     @Autowired
     private OrderRepository orderRepository;
 
     @Test
-    void saveAndFindAllBy() {
-        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
-        var countedItem = countedItemRepository.save(TestEntityFactory.countedItem(item, 1L));
-        var order = new Order();
-        order.getItems().add(countedItem);
-        orderRepository.save(order);
-
-        assertThat(orderRepository.findAllBy()).hasSize(1);
+    void saveAndFindById() {
+        StepVerifier.create(
+                        orderRepository.save(new Order())
+                                .flatMap(saved -> orderRepository.findById(saved.getId()))
+                )
+                .expectNextCount(1)
+                .verifyComplete();
     }
 
     @Test
-    void findById() {
-        var saved = orderRepository.save(new Order());
-
-        assertThat(orderRepository.findById(saved.getId())).isPresent();
+    void findAll() {
+        StepVerifier.create(
+                        orderRepository.save(new Order())
+                                .thenMany(orderRepository.findAll())
+                )
+                .expectNextCount(1)
+                .verifyComplete();
     }
 }

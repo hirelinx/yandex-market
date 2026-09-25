@@ -1,58 +1,57 @@
 package ru.yandex.practicum.market.web.controller;
 
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.market.dto.ItemDto;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.market.service.CartService;
-import ru.yandex.practicum.market.service.ItemService;
-import ru.yandex.practicum.market.web.request.PostItemsAction;
+import ru.yandex.practicum.market.web.request.PostCartItemRequest;
 
 import java.math.BigDecimal;
+
+import static ru.yandex.practicum.market.web.request.PostItemsAction.MINUS;
+import static ru.yandex.practicum.market.web.request.PostItemsAction.PLUS;
 
 @Controller
 @RequestMapping("/cart")
 @AllArgsConstructor
 public class CartController {
-    private final ItemService itemService;
     private final CartService cartService;
 
     @GetMapping("/items")
-    public String getCartItems(Model model) {
+    public Mono<String> getCartItems(Model model) {
         var itemsDto = cartService.retrieveItems();
 
         model.addAttribute("items", itemsDto);
-        model.addAttribute("total",
-                itemsDto.stream()
-                        .map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
-                        .reduce(BigDecimal.ZERO, BigDecimal::add)
-        );
-
-        return "cart";
+        return itemsDto.map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add).map(it ->
+                        model.addAttribute("total",
+                                    it
+                                )
+                ).thenReturn("cart");
     }
 
     @PostMapping("/items")
-    public String getCartItem(
-            @RequestParam(name = "id") long itemId,
-            @RequestParam(name = "action") PostItemsAction postItemsAction,
+    public Mono<String> getCartItem(
+            @Valid @ModelAttribute PostCartItemRequest postCartItemRequest,
             Model model) {
-        switch (postItemsAction) {
-            case PLUS -> cartService.addToCart(itemId);
-            case MINUS -> cartService.removeFromCart(itemId);
-        }
+        var mono = switch (postCartItemRequest.action()) {
+            case PLUS -> cartService.addToCart(postCartItemRequest.id());
+            case MINUS -> cartService.removeFromCart(postCartItemRequest.id());
+        };
 
-        var itemsDto = itemService.search("", Pageable.unpaged());
+        var itemsMono = mono.thenMany(cartService.retrieveItems()).collectList();
 
-        model.addAttribute("items", itemsDto.items());
-        model.addAttribute("total",
-                itemsDto.items().stream()
-                        .map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
-                        .reduce(BigDecimal.ZERO, BigDecimal::add)
-        );
-
-        return "cart";
+        return itemsMono.map(items -> {
+            var total = items.stream()
+                .map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            model.addAttribute("items", items);
+            model.addAttribute("total", total);
+            return "cart";
+        });
     }
 
 }

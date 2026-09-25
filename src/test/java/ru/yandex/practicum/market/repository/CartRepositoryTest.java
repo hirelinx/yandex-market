@@ -2,22 +2,24 @@ package ru.yandex.practicum.market.repository;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.data.r2dbc.test.autoconfigure.DataR2dbcTest;
 import org.springframework.test.context.ActiveProfiles;
-import ru.yandex.practicum.market.support.TestEntityFactory;
+import reactor.test.StepVerifier;
+import ru.yandex.practicum.market.model.Cart;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-@DataJpaTest
+@DataR2dbcTest
 @ActiveProfiles("test")
 class CartRepositoryTest {
     @Autowired
     private CartRepository cartRepository;
 
     @Test
-    void saveAndFindAll() {
-        cartRepository.save(TestEntityFactory.emptyCart());
-
-        assertThat(cartRepository.findAll()).hasSize(1);
+    void saveAndFindFirstBy() {
+        StepVerifier.create(
+                        cartRepository.save(new Cart())
+                                .flatMap(saved -> cartRepository.findFirstBy())
+                )
+                .expectNextCount(1)
+                .verifyComplete();
     }
 }
