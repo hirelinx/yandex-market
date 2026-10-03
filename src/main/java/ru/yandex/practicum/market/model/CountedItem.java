@@ -1,36 +1,28 @@
 package ru.yandex.practicum.market.model;
 
-import jakarta.persistence.*;
 import lombok.*;
-import ru.yandex.practicum.market.common.HibernateIdentifiable;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 @Getter
 @Setter
-@Entity
 @Table(name = "cart_item")
 @NoArgsConstructor
 @ToString
-public non-sealed class CountedItem extends HibernateIdentifiable<Long> implements IEntity {
+public non-sealed class CountedItem implements IEntity {
     @Id
-    @GeneratedValue
-    @Column(name = "id", nullable = false)
+    @Column("id")
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "item", nullable = false)
     @NonNull
-    private Item item;
+    @Column("item_id")
+    private Long itemId;
 
-    @Column(name = "count", nullable = false)
+    @Column("count")
     private Long count = 1L;
 
-    public CountedItem(@NonNull Item item) {
-        this.item = item;
-    }
-
-
-    @Override
-    public Long getIdentity() {
-        return item.getId();
+    public CountedItem(@NonNull Long itemId) {
+        this.itemId = itemId;
     }
 }

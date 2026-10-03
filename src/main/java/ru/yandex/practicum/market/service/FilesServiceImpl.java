@@ -1,10 +1,12 @@
 package ru.yandex.practicum.market.service;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.yandex.practicum.market.exception.NoSuchFileException;
 
 import java.io.IOException;
@@ -14,44 +16,47 @@ import java.nio.file.Paths;
 
 @Service
 public class FilesServiceImpl implements FilesService {
-    public final String uploadsDir;
+
+    private final Path uploadsDir;
 
     public FilesServiceImpl(@Value("${app.uploadsDir}") String uploadsDir) {
-        this.uploadsDir = uploadsDir;
-    }
+        this.uploadsDir = Paths.get(uploadsDir);
 
-    @Override
-    public String upload(MultipartFile file, String newFileName) {
         try {
-            Path uploadDir = Paths.get(uploadsDir);
-            if (!Files.exists(uploadDir)) {
-                Files.createDirectories(uploadDir);
-            }
-
-            // Сохраняем файл
-            Path filePath = uploadDir.resolve(newFileName);
-            file.transferTo(filePath);
-
-            return file.getOriginalFilename();
+            Files.createDirectories(this.uploadsDir);
         } catch (IOException e) {
-            throw new RuntimeException(e.getMessage(), e);
+            throw new RuntimeException("Failed to create uploads directory", e);
         }
     }
 
     @Override
-    public Resource download(String filename) {
-        try {
-            Path filePath = Paths.get(uploadsDir).resolve(filename).normalize();
-            if (Files.notExists(filePath)) {
-                throw new ru.yandex.practicum.market.exception.NoSuchFileException(filename);
-            }
-            byte[] content = Files.readAllBytes(filePath);
+    public Mono<String> upload(FilePart file, String newFileName) {
+        Path filePath = uploadsDir.resolve(newFileName).normalize();
 
-            return new ByteArrayResource(content);
-        } catch (IOException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
+        return file.transferTo(filePath)
+                .then(Mono.fromRunnable(() -> {
+                    try {
+                        if (Files.notExists(filePath)) {
+                            Files.createFile(filePath);
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to store uploaded file", e);
+                    }
+                }))
+                .thenReturn(newFileName);
     }
 
+    @Override
+    public Mono<Resource> download(String filename) {
+        Path filePath = uploadsDir.resolve(filename).normalize();
 
+        return Mono.fromCallable(() -> {
+                    if (Files.notExists(filePath)) {
+                        throw new NoSuchFileException(filename);
+                    }
+
+                    return (Resource) new FileSystemResource(filePath);
+                })
+                .subscribeOn(Schedulers.boundedElastic());
+    }
 }

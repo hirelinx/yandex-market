@@ -2,47 +2,64 @@ package ru.yandex.practicum.market.web.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.market.dto.OrderDto;
 import ru.yandex.practicum.market.service.OrderService;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
-@WebMvcTest(OrderController.class)
+@WebFluxTest(OrderController.class)
 class OrderControllerTest {
     @Autowired
-    private MockMvc mockMvc;
+    private WebTestClient webTestClient;
     @MockitoBean
     private OrderService orderService;
 
     @Test
-    void getOrders_returnsOrdersView() throws Exception {
+    void getOrders_returnsOrdersView() {
         when(orderService.retrieveOrders())
-                .thenReturn(List.of(new OrderDto(1L, List.of(), BigDecimal.ZERO)));
+                .thenReturn(Flux.just(new OrderDto(1L, List.of(), BigDecimal.ZERO)));
 
-        mockMvc.perform(get("/orders"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("orders"))
-                .andExpect(model().attributeExists("orders"));
+        webTestClient.get()
+                .uri("/orders")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void getOrder_returnsOrderView() throws Exception {
-        when(orderService.retrieveById(5L))
-                .thenReturn(new OrderDto(5L, List.of(), BigDecimal.TEN));
+    void getOrders_rendersAllOrdersFromFlux() {
+        when(orderService.retrieveOrders()).thenReturn(Flux.just(
+                new OrderDto(1L, List.of(), BigDecimal.ZERO),
+                new OrderDto(2L, List.of(), BigDecimal.TEN)
+        ));
 
-        mockMvc.perform(get("/orders/5").param("newOrder", "true"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("order"))
-                .andExpect(model().attribute("newOrder", true));
+        webTestClient.get()
+                .uri("/orders")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).contains("Заказ №1");
+                    assertThat(html).contains("Заказ №2");
+                });
+    }
+
+    @Test
+    void getOrder_returnsOrderView() {
+        when(orderService.retrieveById(5L))
+                .thenReturn(Mono.just(new OrderDto(5L, List.of(), BigDecimal.TEN)));
+
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder.path("/orders/5").queryParam("newOrder", true).build())
+                .exchange()
+                .expectStatus().isOk();
     }
 }

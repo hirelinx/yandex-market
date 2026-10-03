@@ -5,13 +5,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.codec.multipart.FilePart;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.market.dto.ItemDto;
+import ru.yandex.practicum.market.dto.ItemsAndPagingDto;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
 import ru.yandex.practicum.market.mapper.ItemMapper;
+import ru.yandex.practicum.market.model.Cart;
+import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.model.Item;
 import ru.yandex.practicum.market.repository.ItemRepository;
 import ru.yandex.practicum.market.support.TestEntityFactory;
@@ -19,11 +23,11 @@ import ru.yandex.practicum.market.web.request.ItemCreateRequest;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,61 +48,63 @@ class ItemServiceImplTest {
     void search_returnsItemsWithCartCounts() {
         var item = TestEntityFactory.item("Молоко", BigDecimal.TEN);
         item.setId(1L);
+        var countedItem = TestEntityFactory.countedItem(1L, 2L);
+        countedItem.setId(10L);
 
-        var countedItem = TestEntityFactory.countedItem(item, 2L);
-        var cart = TestEntityFactory.emptyCart();
-        cart.getCountedItems().add(countedItem);
-
-        var page = (Page<Item>) new PageImpl<>(List.of(item), PageRequest.of(0, 5), 1);
         when(itemRepository.findAllByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", "", PageRequest.of(0, 5)))
-                .thenReturn(page);
-        when(cartService.retrieveCartEntity())
-                .thenReturn(cart);
+                .thenReturn(Flux.just(item));
+        when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L)));
+        when(cartService.getCountedItems(any(Cart.class))).thenReturn(Flux.just(countedItem));
         when(itemMapper.toDto(item, 2L)).thenReturn(new ItemDto(1L, "Молоко", "desc", "files/test.jpg", BigDecimal.TEN, 2));
 
-        var result = itemService.search("", PageRequest.of(0, 5));
-
-        assertThat(result.items()).hasSize(1);
-        assertThat(result.items().getFirst().count()).isEqualTo(2);
+        var expectedDto = new ItemDto(1L, "Молоко", "desc", "files/test.jpg", BigDecimal.TEN, 2);
+        StepVerifier.create(itemService.search("", PageRequest.of(0, 5)))
+                .assertNext(result -> assertEquals(new ItemsAndPagingDto(List.of(expectedDto), false, false), result))
+                .verifyComplete();
     }
 
     @Test
     void retrieveById_existingItem_returnsDto() {
         var item = TestEntityFactory.item("Хлеб", BigDecimal.ONE);
         item.setId(5L);
-        when(itemRepository.findById(5L)).thenReturn(Optional.of(item));
-        when(cartService.retrieveCartEntity()).thenReturn(TestEntityFactory.emptyCart());
+        when(itemRepository.findById(5L)).thenReturn(Mono.just(item));
+        when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L)));
+        when(cartService.getCountedItems(any(Cart.class))).thenReturn(Flux.empty());
         when(itemMapper.toDto(item, 0L)).thenReturn(new ItemDto(5L, "Хлеб", "desc", "files/test.jpg", BigDecimal.ONE, 0));
 
-        var result = itemService.retrieveById(5L);
-
-        assertThat(result.id()).isEqualTo(5L);
+        StepVerifier.create(itemService.retrieveById(5L))
+                .expectNextMatches(dto -> dto.id() == 5L)
+                .verifyComplete();
     }
 
     @Test
-    void retrieveById_missingItem_throwsEntityNotFoundException() {
-        when(itemRepository.findById(99L)).thenReturn(Optional.empty());
+    void retrieveById_missingItem_emitsEntityNotFoundException() {
+        when(itemRepository.findById(99L)).thenReturn(Mono.empty());
 
-        assertThatThrownBy(() -> itemService.retrieveById(99L))
-                .isInstanceOf(EntityNotFoundException.class);
+        StepVerifier.create(itemService.retrieveById(99L))
+                .expectError(EntityNotFoundException.class)
+                .verify();
     }
 
     @Test
     void create_uploadsImageAndSavesItem() {
         var request = new ItemCreateRequest("Сыр", "Описание", BigDecimal.valueOf(150));
-        var image = new MockMultipartFile("image", "cheese.jpg", "image/jpeg", "img".getBytes());
+        var image = mock(FilePart.class);
+        when(image.filename()).thenReturn("cheese.jpg");
+        when(filesService.upload(eq(image), any(String.class))).thenReturn(Mono.just("cheese.jpg"));
         when(itemRepository.save(any(Item.class))).thenAnswer(invocation -> {
             Item saved = invocation.getArgument(0);
             saved.setId(10L);
-            return saved;
+            return Mono.just(saved);
         });
         when(itemMapper.toDto(any(Item.class), eq(0L)))
                 .thenReturn(new ItemDto(10L, "Сыр", "Описание", "files/uuid.jpg", BigDecimal.valueOf(150), 0));
 
-        var result = itemService.create(request, image);
+        StepVerifier.create(itemService.create(request, image))
+                .expectNextMatches(dto -> "Сыр".equals(dto.title()))
+                .verifyComplete();
 
         verify(filesService).upload(eq(image), any(String.class));
         verify(itemRepository).save(any(Item.class));
-        assertThat(result.title()).isEqualTo("Сыр");
     }
 }

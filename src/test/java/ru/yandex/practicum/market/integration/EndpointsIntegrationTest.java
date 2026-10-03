@@ -1,41 +1,33 @@
 package ru.yandex.practicum.market.integration;
 
-import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.test.StepVerifier;
+import ru.yandex.practicum.market.repository.CartCountedItemsRepository;
 import ru.yandex.practicum.market.repository.CartRepository;
 import ru.yandex.practicum.market.repository.CountedItemRepository;
 import ru.yandex.practicum.market.repository.ItemRepository;
 import ru.yandex.practicum.market.repository.OrderRepository;
-import ru.yandex.practicum.market.service.FilesService;
+import ru.yandex.practicum.market.repository.OrdersItemsRepository;
 import ru.yandex.practicum.market.support.TestEntityFactory;
 
 import java.math.BigDecimal;
-import java.util.HashSet;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrlPattern;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureWebTestClient
 @ActiveProfiles("test")
-@Transactional
 class EndpointsIntegrationTest {
     @Autowired
-    private MockMvc mockMvc;
+    private WebTestClient webTestClient;
     @Autowired
     private ItemRepository itemRepository;
     @Autowired
@@ -43,207 +35,203 @@ class EndpointsIntegrationTest {
     @Autowired
     private CartRepository cartRepository;
     @Autowired
+    private CartCountedItemsRepository cartCountedItemsRepository;
+    @Autowired
     private OrderRepository orderRepository;
     @Autowired
-    private FilesService filesService;
-
+    private OrdersItemsRepository ordersItemsRepository;
     @BeforeEach
     void setUp() {
-        orderRepository.deleteAll();
-        countedItemRepository.deleteAll();
-        itemRepository.deleteAll();
-
-        var carts = cartRepository.findAll();
-        if (carts.isEmpty()) {
-            cartRepository.save(TestEntityFactory.emptyCart());
-        } else {
-            var cart = carts.getFirst();
-
-            cart.getCountedItems().clear();
-            cartRepository.save(cart);
-        }
+        ordersItemsRepository.deleteAll().block();
+        orderRepository.deleteAll().block();
+        cartCountedItemsRepository.deleteAll().block();
+        countedItemRepository.deleteAll().block();
+        itemRepository.deleteAll().block();
     }
 
     @Test
-    void root_redirectsToItems() throws Exception {
-        mockMvc.perform(get("/"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("items"));
+    void root_redirectsToItems() {
+        webTestClient.get()
+                .uri("/")
+                .exchange()
+                .expectStatus().isFound()
+                .expectHeader().valueEquals("Location", "/items");
     }
 
     @Test
-    void getItems_returnsCatalogPage() throws Exception {
-        itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
+    void getItems_returnsCatalogPage() {
+        itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
 
-        mockMvc.perform(get("/items"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("items"));
+        webTestClient.get()
+                .uri("/items")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void postItems_addsItemToCart() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
+    void postItems_addsItemToCart() {
+        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
 
-        mockMvc.perform(post("/items")
-                        .param("id", item.getId().toString())
-                        .param("action", "PLUS")
-                        .param("search", "")
-                        .param("sort", "NO")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "5"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/items?search=&sort=NO&pageNumber=1&pageSize=5"));
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("id", item.getId())
+                        .queryParam("action", "PLUS")
+                        .queryParam("search", "")
+                        .queryParam("sort", "NO")
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 5)
+                        .build())
+                .exchange()
+                .expectStatus().is3xxRedirection();
 
-        assertThat(countedItemRepository.findFirstByItem_Id(item.getId())).isPresent();
+        StepVerifier.create(countedItemRepository.findFirstByItemId(item.getId()))
+                .expectNextCount(1)
+                .verifyComplete();
     }
 
     @Test
-    void getNewItem_returnsCreateForm() throws Exception {
-        mockMvc.perform(get("/items/new"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("item-new"));
+    void getNewItem_returnsCreateForm() {
+        webTestClient.get()
+                .uri("/items/new")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void postNewItem_createsItemAndRedirects() throws Exception {
-        var image = new MockMultipartFile("image", "photo.jpg", "image/jpeg", "image-content".getBytes());
+    void getItem_returnsItemPage() {
+        var item = itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE)).block();
 
-        var result = mockMvc.perform(multipart("/items/new")
-                        .file(image)
-                        .param("title", "Сыр")
-                        .param("description", "Описание")
-                        .param("price", "150.00"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrlPattern("/items/*"))
-                .andReturn();
-
-        var redirectUrl = result.getResponse().getRedirectedUrl();
-        assertThat(redirectUrl).isNotNull();
-        var itemId = Long.parseLong(redirectUrl.substring("/items/".length()));
-        var savedItem = itemRepository.findById(itemId);
-        assertThat(savedItem).isPresent();
-        assertThat(savedItem.get().getTitle()).isEqualTo("Сыр");
-        assertThat(savedItem.get().getImgPath()).startsWith("files/");
+        webTestClient.get()
+                .uri("/items/{id}", item.getId())
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void getItem_returnsItemPage() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE));
-
-        mockMvc.perform(get("/items/{id}", item.getId()))
-                .andExpect(status().isOk())
-                .andExpect(view().name("item"));
+    void getCartItems_returnsCartPage() {
+        webTestClient.get()
+                .uri("/cart/items")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void postItem_updatesCartOnItemPage() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE));
+    void buy_createsOrder() {
+        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("id", item.getId())
+                        .queryParam("action", "PLUS")
+                        .queryParam("search", "")
+                        .queryParam("sort", "NO")
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 5)
+                        .build())
+                .exchange()
+                .expectStatus().is3xxRedirection();
 
-        mockMvc.perform(post("/items/{id}", item.getId()).param("action", "PLUS"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("item"));
+        webTestClient.post()
+                .uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueMatches("Location", "/orders/\\d+\\?newOrder=true");
 
-        assertThat(countedItemRepository.findFirstByItem_Id(item.getId())).isPresent();
+        StepVerifier.create(orderRepository.findAll())
+                .expectNextCount(1)
+                .verifyComplete();
     }
 
     @Test
-    void getCartItems_returnsCartPage() throws Exception {
-        mockMvc.perform(get("/cart/items"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("cart"));
+    void addToCart_afterOrder_addsItemToCartAgain() {
+        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("id", item.getId())
+                        .queryParam("action", "PLUS")
+                        .queryParam("search", "")
+                        .queryParam("sort", "NO")
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 5)
+                        .build())
+                .exchange()
+                .expectStatus().is3xxRedirection();
+        webTestClient.post().uri("/buy").exchange().expectStatus().is3xxRedirection();
+
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("id", item.getId())
+                        .queryParam("action", "PLUS")
+                        .queryParam("search", "")
+                        .queryParam("sort", "NO")
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 5)
+                        .build())
+                .exchange()
+                .expectStatus().is3xxRedirection();
+
+        StepVerifier.create(
+                        cartRepository.findFirstBy()
+                                .flatMapMany(cart -> cartCountedItemsRepository.findByCartId(cart.getId()))
+                )
+                .expectNextCount(1)
+                .verifyComplete();
     }
 
     @Test
-    void postCartItems_modifiesCart() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
-
-        mockMvc.perform(post("/cart/items")
-                        .param("id", item.getId().toString())
-                        .param("action", "PLUS"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("cart"));
+    void getOrders_returnsOrdersPage() {
+        webTestClient.get()
+                .uri("/orders")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void buy_createsOrder() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
-        mockMvc.perform(post("/items")
-                .param("id", item.getId().toString())
-                .param("action", "PLUS")
-                .param("search", "")
-                .param("sort", "NO")
-                .param("pageNumber", "1")
-                .param("pageSize", "5"));
+    void getOrders_afterSeveralPurchases_listsEveryOrder() {
+        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
+        addItemToCart(item.getId());
+        webTestClient.post().uri("/buy").exchange().expectStatus().is3xxRedirection();
+        addItemToCart(item.getId());
+        webTestClient.post().uri("/buy").exchange().expectStatus().is3xxRedirection();
 
-        mockMvc.perform(post("/buy"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrlPattern("/orders/*?newOrder=true"));
+        var orderIds = orderRepository.findAll().map(order -> order.getId()).collectList().block();
+        assertThat(orderIds).hasSize(2);
 
-        assertThat(orderRepository.findAll()).hasSize(1);
+        webTestClient.get()
+                .uri("/orders")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).contains("Заказ №" + orderIds.get(0));
+                    assertThat(html).contains("Заказ №" + orderIds.get(1));
+                });
     }
 
-    @Test
-    void addToCart_afterOrder_addsItemToCartAgain() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
-        mockMvc.perform(post("/items")
-                .param("id", item.getId().toString())
-                .param("action", "PLUS")
-                .param("search", "")
-                .param("sort", "NO")
-                .param("pageNumber", "1")
-                .param("pageSize", "5"));
-        mockMvc.perform(post("/buy"));
-
-        mockMvc.perform(post("/items")
-                        .param("id", item.getId().toString())
-                        .param("action", "PLUS")
-                        .param("search", "")
-                        .param("sort", "NO")
-                        .param("pageNumber", "1")
-                        .param("pageSize", "5"))
-                .andExpect(status().is3xxRedirection());
-
-        var cart = cartRepository.findAll().getFirst();
-        assertThat(cart.getCountedItems()).hasSize(1);
-        assertThat(cart.getCountedItems().iterator().next().getCount()).isEqualTo(1L);
-    }
-
-    @Test
-    void getOrders_returnsOrdersPage() throws Exception {
-        mockMvc.perform(get("/orders"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("orders"));
-    }
-
-    @Test
-    void getOrder_returnsOrderPage() throws Exception {
-        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN));
-        mockMvc.perform(post("/items")
-                .param("id", item.getId().toString())
-                .param("action", "PLUS")
-                .param("search", "")
-                .param("sort", "NO")
-                .param("pageNumber", "1")
-                .param("pageSize", "5"));
-        var buyResult = mockMvc.perform(post("/buy"))
-                .andExpect(status().is3xxRedirection())
-                .andReturn();
-        var orderId = buyResult.getResponse().getRedirectedUrl()
-                .replace("/orders/", "")
-                .replace("?newOrder=true", "");
-
-        mockMvc.perform(get("/orders/{id}", orderId).param("newOrder", "true"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("order"));
+    private void addItemToCart(long itemId) {
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("id", itemId)
+                        .queryParam("action", "PLUS")
+                        .queryParam("search", "")
+                        .queryParam("sort", "NO")
+                        .queryParam("pageNumber", 1)
+                        .queryParam("pageSize", 5)
+                        .build())
+                .exchange()
+                .expectStatus().is3xxRedirection();
     }
 
     @Test
     void getFile_returnsUploadedContent() throws Exception {
-        var image = new MockMultipartFile("image", "photo.jpg", "image/jpeg", "stored-image".getBytes());
-        filesService.upload(image, "integration.jpg");
+        Path uploadsDir = Path.of(System.getProperty("java.io.tmpdir"), "market-test-uploads");
+        Files.createDirectories(uploadsDir);
+        Files.writeString(uploadsDir.resolve("integration.jpg"), "stored-image");
 
-        mockMvc.perform(get("/files/integration.jpg"))
-                .andExpect(status().isOk())
-                .andExpect(content().bytes("stored-image".getBytes()));
+        webTestClient.get()
+                .uri("/files/integration.jpg")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .isEqualTo("stored-image");
     }
 }

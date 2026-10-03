@@ -2,58 +2,50 @@ package ru.yandex.practicum.market.web.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.market.dto.ItemDto;
-import ru.yandex.practicum.market.dto.ItemsAndPagingDto;
 import ru.yandex.practicum.market.service.CartService;
-import ru.yandex.practicum.market.service.ItemService;
 
 import java.math.BigDecimal;
-import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
-@WebMvcTest(CartController.class)
+@WebFluxTest(CartController.class)
 class CartControllerTest {
     @Autowired
-    private MockMvc mockMvc;
-    @MockitoBean
-    private ItemService itemService;
+    private WebTestClient webTestClient;
     @MockitoBean
     private CartService cartService;
 
     @Test
-    void getCartItems_returnsCartView() throws Exception {
-        when(itemService.search(any(), any()))
-                .thenReturn(new ItemsAndPagingDto(List.of(
-                        new ItemDto(1L, "Молоко", "desc", "files/a.jpg", BigDecimal.TEN, 1)
-                ), false, false));
+    void getCartItems_returnsCartView() {
+        when(cartService.retrieveItems())
+                .thenReturn(Flux.just(new ItemDto(1L, "Молоко", "desc", "files/a.jpg", BigDecimal.TEN, 1)));
 
-        mockMvc.perform(get("/cart/items"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("cart"))
-                .andExpect(model().attributeExists("items", "total"));
+        webTestClient.get()
+                .uri("/cart/items")
+                .exchange()
+                .expectStatus().isOk();
     }
 
     @Test
-    void postCartItems_plusAction_returnsCartView() throws Exception {
-        when(itemService.search(any(), any()))
-                .thenReturn(new ItemsAndPagingDto(List.of(), false, false));
+    void postCartItems_plusAction_returnsCartView() {
+        when(cartService.addToCart(2L)).thenReturn(Mono.just(true));
+        when(cartService.retrieveItems())
+                .thenReturn(Flux.just(new ItemDto(2L, "Хлеб", "desc", "files/a.jpg", BigDecimal.ONE, 1)));
 
-        mockMvc.perform(post("/cart/items")
-                        .param("id", "2")
-                        .param("action", "PLUS"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("cart"));
+        webTestClient.post()
+                .uri(uriBuilder -> uriBuilder.path("/cart/items")
+                        .queryParam("id", 2)
+                        .queryParam("action", "PLUS")
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
 
         verify(cartService).addToCart(2L);
     }

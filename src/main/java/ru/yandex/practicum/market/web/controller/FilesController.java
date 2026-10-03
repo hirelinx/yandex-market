@@ -8,6 +8,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.market.service.FilesService;
 
 @Controller
@@ -17,8 +18,8 @@ public class FilesController {
     private final FilesService filesService;
 
     @GetMapping("/{filename}")
-    public ResponseEntity<Resource> getFile(@PathVariable String filename) {
-        Resource resource = filesService.download(filename);
+    public ResponseEntity<Mono<Resource>> getFile(@PathVariable String filename) {
+        Mono<Resource> resource = filesService.download(filename);
         return ResponseEntity.ok()
                 .contentType(resolveMediaType(filename))
                 .body(resource);

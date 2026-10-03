@@ -99,7 +99,7 @@
                              tableName="cart_counted_items"/>
     </changeSet>
     <changeSet id="1789987098848-15" author="alex">
-        <addForeignKeyConstraint baseColumnNames="item" baseTableName="cart_item" constraintName="FK_CART_ITEM_ON_ITEM"
+        <addForeignKeyConstraint baseColumnNames="item_id" baseTableName="cart_item" constraintName="FK_CART_ITEM_ON_ITEM"
                                  referencedColumnNames="id" referencedTableName="item"/>
     </changeSet>
     <changeSet id="1789987098848-16" author="alex">
