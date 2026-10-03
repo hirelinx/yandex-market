@@ -18,7 +18,6 @@ public class DatabaseInitializer {
         cartRepository.count()
                 .filter(count -> count == 0)
                 .flatMap(count -> cartRepository.save(new Cart()))
-                .onErrorResume(error -> Mono.empty())
-                .subscribe();
+                .block();
     }
 }

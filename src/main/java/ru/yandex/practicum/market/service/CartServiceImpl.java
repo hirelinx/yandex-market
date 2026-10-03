@@ -3,6 +3,7 @@ package ru.yandex.practicum.market.service;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -28,6 +29,7 @@ public class CartServiceImpl implements CartService {
     private final ItemRepository itemRepository;
 
     @Override
+    @Transactional
     public Mono<Boolean> addToCart(long itemId) {
         var cart = retrieveCartEntity();
         var existingCartItem = cart.flatMap(it -> findInCart(it, itemId));
@@ -54,6 +56,7 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
+    @Transactional
     public Mono<@NonNull Boolean> removeFromCart(long itemId) {
         var cart = retrieveCartEntity();
         var optCartItem = cart.flatMap(it -> findInCart(it, itemId));

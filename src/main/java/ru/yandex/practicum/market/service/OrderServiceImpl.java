@@ -2,6 +2,7 @@ package ru.yandex.practicum.market.service;
 
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.market.dto.ItemDto;
@@ -59,6 +60,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional
     public Mono<OrderDto> createFromCart() {
         return cartService.retrieveCartEntity()
                 .flatMap(cart -> cartService.getCountedItems(cart).collectList()
