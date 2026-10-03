@@ -6,7 +6,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import ru.yandex.practicum.market.dto.ItemDto;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
 import ru.yandex.practicum.market.mapper.ItemMapper;
@@ -34,25 +33,16 @@ public class CartServiceImpl implements CartService {
         var cart = retrieveCartEntity();
         var existingCartItem = cart.flatMap(it -> findInCart(it, itemId));
 
-        return existingCartItem
-                .flatMap(cartItem -> {
-                    cartItem.setCount(cartItem.getCount() + 1);
-                    return countedItemRepository.save(cartItem).thenReturn(false);
-                })
-                .switchIfEmpty(
-                        cart.flatMap(c ->
-                                itemRepository.findById(itemId)
-                                        .switchIfEmpty(Mono.defer(() -> {
-                                            var item = new Item();
-                                            item.setId(itemId);
-                                            return Mono.error(new EntityNotFoundException(item));
-                                        }))
-                                        .flatMap(item -> countedItemRepository.save(new CountedItem(itemId))
-                                                .flatMap(saved -> cartCountedItemsRepository.save(
-                                                        new CartCountedItems(c.getId(), saved.getId())
-                                                ).thenReturn(true)))
-                        )
-                );
+        return existingCartItem.flatMap(cartItem -> {
+            cartItem.setCount(cartItem.getCount() + 1);
+            return countedItemRepository.save(cartItem).thenReturn(false);
+        }).switchIfEmpty(cart.flatMap(c -> itemRepository.findById(itemId).switchIfEmpty(Mono.defer(() -> {
+            var item = new Item();
+            item.setId(itemId);
+            return Mono.error(new EntityNotFoundException(item));
+        })).flatMap(item -> countedItemRepository.save(new CountedItem(itemId)).flatMap(
+                saved -> cartCountedItemsRepository.save(new CartCountedItems(c.getId(), saved.getId()))
+                        .thenReturn(true)))));
     }
 
     @Override
@@ -71,8 +61,7 @@ public class CartServiceImpl implements CartService {
             if (cartItem.getCount() == 0) {
 
                 return cartCountedItemsRepository.deleteCartCountedItemsByCountedItemsId(cartItem.getId())
-                        .then(countedItemRepository.delete(cartItem))
-                        .then(Mono.just(false));
+                        .then(countedItemRepository.delete(cartItem)).then(Mono.just(false));
             }
 
             return countedItemRepository.save(cartItem).then(Mono.just(true));
@@ -80,8 +69,7 @@ public class CartServiceImpl implements CartService {
     }
 
     private Mono<CountedItem> findInCart(Cart cart, long itemId) {
-        return getCountedItems(cart)
-                .filter(cartItem -> cartItem.getItemId() != null && cartItem.getItemId() == itemId)
+        return getCountedItems(cart).filter(cartItem -> cartItem.getItemId() != null && cartItem.getItemId() == itemId)
                 .next();
     }
 

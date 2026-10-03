@@ -5,9 +5,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.util.function.Tuple2;
 import ru.yandex.practicum.market.dto.ItemDto;
 import ru.yandex.practicum.market.dto.ItemsAndPagingDto;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
@@ -31,46 +29,30 @@ public class ItemServiceImpl implements ItemService {
 
     @Override
     public Mono<ItemsAndPagingDto> search(String search, Pageable pageable) {
-        return getCountMap()
-                .flatMap(countMap ->
-                        itemRepository
-                                .findAllByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                                        search,
-                                        search,
-                                        pageable
-                                )
-                                .map(item -> itemMapper.toDto(
-                                        item,
-                                        countMap.getOrDefault(item.getId(), 0L)
-                                ))
-                                .collectList()
-                )
-                .map(items -> new ItemsAndPagingDto(
-                        items,
-                        pageable.isPaged() && pageable.getPageNumber() > 0,
-                        pageable.isPaged() && items.size() == pageable.getPageSize()
-                ));
+        return getCountMap().flatMap(
+                        countMap ->
+                                itemRepository.findAllByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(search,
+                                        search, pageable).map(item -> itemMapper.toDto(item,
+                                        countMap.getOrDefault(item.getId(), 0L)))
+                                .collectList())
+                .map(items -> new ItemsAndPagingDto(items, pageable.isPaged() && pageable.getPageNumber() > 0,
+                        pageable.isPaged() && items.size() == pageable.getPageSize()));
     }
 
     @Override
     public Mono<ItemDto> retrieveById(long id) {
         var optItem = itemRepository.findById(id);
 
-        return optItem.flatMap(item ->
-                getCountMap().map(cM ->
-                        Map.entry(item, cM.getOrDefault(item.getId(), 0L))
-                )
-        ).map(it -> itemMapper.toDto(it.getKey(), it.getValue())
-        ).switchIfEmpty(Mono.defer(() -> {
-            var itemCriteria = new Item();
-            itemCriteria.setId(id);
-            return Mono.error(new EntityNotFoundException(itemCriteria));
-        }));
+        return optItem.flatMap(item -> getCountMap().map(cM -> Map.entry(item, cM.getOrDefault(item.getId(), 0L))))
+                .map(it -> itemMapper.toDto(it.getKey(), it.getValue())).switchIfEmpty(Mono.defer(() -> {
+                    var itemCriteria = new Item();
+                    itemCriteria.setId(id);
+                    return Mono.error(new EntityNotFoundException(itemCriteria));
+                }));
     }
 
     private Mono<Map<Long, Long>> getCountMap() {
-        return cartService.retrieveCartEntity()
-                .flatMapMany(cartService::getCountedItems)
+        return cartService.retrieveCartEntity().flatMapMany(cartService::getCountedItems)
                 .collect(Collectors.toMap(CountedItem::getItemId, CountedItem::getCount));
     }
 

@@ -32,26 +32,18 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public Flux<OrderDto> retrieveOrders() {
-        return orderRepository.findAll()
-                .flatMap(order -> ordersItemsRepository.findByOrderId(order.getId())
-                        .map(OrdersItems::getItemsId)
-                        .collectList()
-                        .flatMap(orderItemIds -> Mono.zip(
-                                        orderTotalSum(orderItemIds),
-                                        orderItems(orderItemIds))
+        return orderRepository.findAll().flatMap(
+                order -> ordersItemsRepository.findByOrderId(order.getId()).map(OrdersItems::getItemsId).collectList()
+                        .flatMap(orderItemIds -> Mono.zip(orderTotalSum(orderItemIds), orderItems(orderItemIds))
                                 .map(tuple -> orderMapper.toDto(order, tuple.getT1(), tuple.getT2()))));
     }
 
     @Override
     public Mono<OrderDto> retrieveById(long id) {
-        return orderRepository.findById(id)
-                .flatMap(order -> ordersItemsRepository.findByOrderId(order.getId())
-                        .map(OrdersItems::getItemsId)
-                        .collectList()
-                        .flatMap(orderItemIds -> Mono.zip(
-                                        orderTotalSum(orderItemIds),
-                                        orderItems(orderItemIds))
-                                .map(tuple -> orderMapper.toDto(order, tuple.getT1(), tuple.getT2()))))
+        return orderRepository.findById(id).flatMap(
+                        order -> ordersItemsRepository.findByOrderId(order.getId()).map(OrdersItems::getItemsId).collectList()
+                                .flatMap(orderItemIds -> Mono.zip(orderTotalSum(orderItemIds), orderItems(orderItemIds))
+                                        .map(tuple -> orderMapper.toDto(order, tuple.getT1(), tuple.getT2()))))
                 .switchIfEmpty(Mono.defer(() -> {
                     var criteria = new Order();
                     criteria.setId(id);
@@ -62,15 +54,13 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public Mono<OrderDto> createFromCart() {
-        return cartService.retrieveCartEntity()
-                .flatMap(cart -> cartService.getCountedItems(cart).collectList()
-                        .flatMap(countedItems -> orderRepository.save(new Order())
-                                .flatMap(savedOrder -> ordersItemsRepository.saveAll(Flux.fromIterable(
-                                        countedItems.stream()
-                                                .map(ci -> new OrdersItems(savedOrder.getId(), ci.getId()))
-                                                .toList()
-                                )).then(cartCountedItemsRepository.deleteAll())
-                                        .then(retrieveById(savedOrder.getId())))));
+        return cartService.retrieveCartEntity().flatMap(cart -> cartService.getCountedItems(cart).collectList().flatMap(
+                countedItems -> orderRepository.save(new Order()).flatMap(savedOrder ->
+                        ordersItemsRepository.saveAll(
+                                Flux.fromIterable(
+                                        countedItems.stream().map(ci -> new OrdersItems(savedOrder.getId(), ci.getId()))
+                                                .toList())).then(cartCountedItemsRepository.deleteAll())
+                        .then(retrieveById(savedOrder.getId())))));
     }
 
     private Mono<List<ItemDto>> orderItems(List<Long> countedItemIds) {
@@ -79,18 +69,16 @@ public class OrderServiceImpl implements OrderService {
         }
         return countedItemRepository.findAllById(Flux.fromIterable(countedItemIds))
                 .flatMap(countedItem -> itemRepository.findById(countedItem.getItemId())
-                        .map(item -> itemMapper.toDto(item, countedItem.getCount())))
-                .collectList();
+                        .map(item -> itemMapper.toDto(item, countedItem.getCount()))).collectList();
     }
 
     private Mono<BigDecimal> orderTotalSum(List<Long> countedItemIds) {
         if (countedItemIds.isEmpty()) {
             return Mono.just(BigDecimal.ZERO);
         }
-        return countedItemRepository.findAllById(Flux.fromIterable(countedItemIds))
-                .flatMap(countedItem -> itemRepository.findById(countedItem.getItemId())
-                        .map(item -> item.getPrice().multiply(BigDecimal.valueOf(countedItem.getCount()))))
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .defaultIfEmpty(BigDecimal.ZERO);
+        return countedItemRepository.findAllById(Flux.fromIterable(countedItemIds)).flatMap(
+                        countedItem -> itemRepository.findById(countedItem.getItemId())
+                                .map(item -> item.getPrice().multiply(BigDecimal.valueOf(countedItem.getCount()))))
+                .reduce(BigDecimal.ZERO, BigDecimal::add).defaultIfEmpty(BigDecimal.ZERO);
     }
 }

@@ -33,17 +33,15 @@ public class FilesServiceImpl implements FilesService {
     public Mono<String> upload(FilePart file, String newFileName) {
         Path filePath = uploadsDir.resolve(newFileName).normalize();
 
-        return file.transferTo(filePath)
-                .then(Mono.fromRunnable(() -> {
-                    try {
-                        if (Files.notExists(filePath)) {
-                            Files.createFile(filePath);
-                        }
-                    } catch (IOException e) {
-                        throw new RuntimeException("Failed to store uploaded file", e);
-                    }
-                }))
-                .thenReturn(newFileName);
+        return file.transferTo(filePath).then(Mono.fromRunnable(() -> {
+            try {
+                if (Files.notExists(filePath)) {
+                    Files.createFile(filePath);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to store uploaded file", e);
+            }
+        })).thenReturn(newFileName);
     }
 
     @Override
@@ -51,12 +49,11 @@ public class FilesServiceImpl implements FilesService {
         Path filePath = uploadsDir.resolve(filename).normalize();
 
         return Mono.fromCallable(() -> {
-                    if (Files.notExists(filePath)) {
-                        throw new NoSuchFileException(filename);
-                    }
+            if (Files.notExists(filePath)) {
+                throw new NoSuchFileException(filename);
+            }
 
-                    return (Resource) new FileSystemResource(filePath);
-                })
-                .subscribeOn(Schedulers.boundedElastic());
+            return (Resource) new FileSystemResource(filePath);
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 }
