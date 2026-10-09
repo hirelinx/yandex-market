@@ -101,15 +101,14 @@ class ItemControllerTest {
     }
 
     @Test
-    void postItem_minusAction_returnsItemView() {
+    void postItem_minusAction_redirectsToItemPage() {
         when(cartService.removeFromCart(3L)).thenReturn(Mono.just(true));
-        when(itemService.retrieveById(3L))
-                .thenReturn(Mono.just(new ItemDto(3L, "Хлеб", "desc", "files/b.jpg", BigDecimal.ONE, 1)));
 
         webTestClient.post()
                 .uri(uriBuilder -> uriBuilder.path("/items/3").queryParam("action", "MINUS").build())
                 .exchange()
-                .expectStatus().isOk();
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/items/3");
 
         verify(cartService).removeFromCart(3L);
     }
