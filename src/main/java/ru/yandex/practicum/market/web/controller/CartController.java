@@ -22,15 +22,15 @@ public class CartController {
 
     @GetMapping("/items")
     public Mono<String> getCartItems(Model model) {
-        var itemsDto = cartService.retrieveItems();
-
-        model.addAttribute("items", itemsDto);
-        return itemsDto.map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add).map(it ->
-                        model.addAttribute("total",
-                                    it
-                                )
-                ).thenReturn("cart");
+        return cartService.retrieveCartEntity().flatMap(cart ->
+                cartService.retrieveItems(cart).map(items -> {
+                    model.addAttribute("items", items);
+                    var total = items.stream()
+                            .map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    model.addAttribute("total", total);
+                    return "cart";
+                }));
     }
 
     @PostMapping("/items")
@@ -42,16 +42,15 @@ public class CartController {
             case MINUS -> cartService.removeFromCart(postCartItemRequest.id());
         };
 
-        var itemsMono = mono.thenMany(cartService.retrieveItems()).collectList();
-
-        return itemsMono.map(items -> {
-            var total = items.stream()
-                .map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-            model.addAttribute("items", items);
-            model.addAttribute("total", total);
-            return "cart";
-        });
+        return mono.then(cartService.retrieveCartEntity()).flatMap(cart ->
+                cartService.retrieveItems(cart).map(items -> {
+                    var total = items.stream()
+                            .map(it -> it.price().multiply(BigDecimal.valueOf(it.count())))
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    model.addAttribute("items", items);
+                    model.addAttribute("total", total);
+                    return "cart";
+                }));
     }
 
 }

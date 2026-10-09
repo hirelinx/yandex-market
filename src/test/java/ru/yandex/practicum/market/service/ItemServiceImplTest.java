@@ -1,5 +1,6 @@
 package ru.yandex.practicum.market.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -15,7 +16,6 @@ import ru.yandex.practicum.market.dto.ItemsAndPagingDto;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
 import ru.yandex.practicum.market.mapper.ItemMapper;
 import ru.yandex.practicum.market.model.Cart;
-import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.model.Item;
 import ru.yandex.practicum.market.repository.ItemRepository;
 import ru.yandex.practicum.market.support.TestEntityFactory;
@@ -27,9 +27,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ItemServiceImplTest {
@@ -42,7 +40,17 @@ class ItemServiceImplTest {
     @Mock
     private CartService cartService;
     @InjectMocks
+    private ItemReadServiceImpl itemReadService;
+    @InjectMocks
+    private ItemWriteServiceImpl itemWriteService;
     private ItemServiceImpl itemService;
+
+    @BeforeEach
+    void setUp() {
+        itemWriteService.setItemReadService(itemReadService);
+
+        itemService = new ItemServiceImpl(itemReadService, itemWriteService);
+    }
 
     @Test
     void search_returnsItemsWithCartCounts() {
@@ -51,15 +59,18 @@ class ItemServiceImplTest {
         var countedItem = TestEntityFactory.countedItem(1L, 2L);
         countedItem.setId(10L);
 
-        when(itemRepository.findAllByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", "", PageRequest.of(0, 5)))
+        when(itemRepository.findAllByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", "",
+                PageRequest.of(0, 5)))
                 .thenReturn(Flux.just(item));
         when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L)));
         when(cartService.getCountedItems(any(Cart.class))).thenReturn(Flux.just(countedItem));
-        when(itemMapper.toDto(item, 2L)).thenReturn(new ItemDto(1L, "Молоко", "desc", "files/test.jpg", BigDecimal.TEN, 2));
+        when(itemMapper.toDto(item, 2L)).thenReturn(
+                new ItemDto(1L, "Молоко", "desc", "files/test.jpg", BigDecimal.TEN, 2));
 
         var expectedDto = new ItemDto(1L, "Молоко", "desc", "files/test.jpg", BigDecimal.TEN, 2);
         StepVerifier.create(itemService.search("", PageRequest.of(0, 5)))
-                .assertNext(result -> assertEquals(new ItemsAndPagingDto(List.of(expectedDto), false, false), result))
+                .assertNext(result ->
+                        assertEquals(new ItemsAndPagingDto(List.of(expectedDto), false, false), result))
                 .verifyComplete();
     }
 
@@ -70,7 +81,8 @@ class ItemServiceImplTest {
         when(itemRepository.findById(5L)).thenReturn(Mono.just(item));
         when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L)));
         when(cartService.getCountedItems(any(Cart.class))).thenReturn(Flux.empty());
-        when(itemMapper.toDto(item, 0L)).thenReturn(new ItemDto(5L, "Хлеб", "desc", "files/test.jpg", BigDecimal.ONE, 0));
+        when(itemMapper.toDto(item, 0L)).thenReturn(
+                new ItemDto(5L, "Хлеб", "desc", "files/test.jpg", BigDecimal.ONE, 0));
 
         StepVerifier.create(itemService.retrieveById(5L))
                 .expectNextMatches(dto -> dto.id() == 5L)

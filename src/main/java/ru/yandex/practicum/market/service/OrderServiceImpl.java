@@ -1,6 +1,7 @@
 package ru.yandex.practicum.market.service;
 
 import lombok.AllArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -20,65 +21,31 @@ import java.util.List;
 @Service
 @AllArgsConstructor
 public class OrderServiceImpl implements OrderService {
-    private final OrderRepository orderRepository;
-    private final CartService cartService;
-    private final OrderMapper orderMapper;
-    private final ItemMapper itemMapper;
-    private final CartRepository cartRepository;
-    private final OrdersItemsRepository ordersItemsRepository;
-    private final CartCountedItemsRepository cartCountedItemsRepository;
-    private final CountedItemRepository countedItemRepository;
-    private final ItemRepository itemRepository;
+    private final OrderReadService orderReadService;
+    private final OrderWriteService orderWriteService;
 
     @Override
     public Flux<OrderDto> retrieveOrders() {
-        return orderRepository.findAll().flatMap(
-                order -> ordersItemsRepository.findByOrderId(order.getId()).map(OrdersItems::getItemsId).collectList()
-                        .flatMap(orderItemIds -> Mono.zip(orderTotalSum(orderItemIds), orderItems(orderItemIds))
-                                .map(tuple -> orderMapper.toDto(order, tuple.getT1(), tuple.getT2()))));
+        return orderReadService.retrieveOrders();
     }
 
     @Override
     public Mono<OrderDto> retrieveById(long id) {
-        return orderRepository.findById(id).flatMap(
-                        order -> ordersItemsRepository.findByOrderId(order.getId()).map(OrdersItems::getItemsId).collectList()
-                                .flatMap(orderItemIds -> Mono.zip(orderTotalSum(orderItemIds), orderItems(orderItemIds))
-                                        .map(tuple -> orderMapper.toDto(order, tuple.getT1(), tuple.getT2()))))
-                .switchIfEmpty(Mono.defer(() -> {
-                    var criteria = new Order();
-                    criteria.setId(id);
-                    return Mono.error(new EntityNotFoundException(criteria));
-                }));
+        return orderReadService.retrieveById(id);
     }
 
     @Override
-    @Transactional
+    public void cacheEvictOrders() {
+        orderReadService.cacheEvictOrders();
+    }
+
+    @Override
+    public void cacheEvictOrderById(long id) {
+        orderReadService.cacheEvictOrderById(id);
+    }
+
+    @Override
     public Mono<OrderDto> createFromCart() {
-        return cartService.retrieveCartEntity().flatMap(cart -> cartService.getCountedItems(cart).collectList().flatMap(
-                countedItems -> orderRepository.save(new Order()).flatMap(savedOrder ->
-                        ordersItemsRepository.saveAll(
-                                Flux.fromIterable(
-                                        countedItems.stream().map(ci -> new OrdersItems(savedOrder.getId(), ci.getId()))
-                                                .toList())).then(cartCountedItemsRepository.deleteAll())
-                        .then(retrieveById(savedOrder.getId())))));
-    }
-
-    private Mono<List<ItemDto>> orderItems(List<Long> countedItemIds) {
-        if (countedItemIds.isEmpty()) {
-            return Mono.just(List.of());
-        }
-        return countedItemRepository.findAllById(Flux.fromIterable(countedItemIds))
-                .flatMap(countedItem -> itemRepository.findById(countedItem.getItemId())
-                        .map(item -> itemMapper.toDto(item, countedItem.getCount()))).collectList();
-    }
-
-    private Mono<BigDecimal> orderTotalSum(List<Long> countedItemIds) {
-        if (countedItemIds.isEmpty()) {
-            return Mono.just(BigDecimal.ZERO);
-        }
-        return countedItemRepository.findAllById(Flux.fromIterable(countedItemIds)).flatMap(
-                        countedItem -> itemRepository.findById(countedItem.getItemId())
-                                .map(item -> item.getPrice().multiply(BigDecimal.valueOf(countedItem.getCount()))))
-                .reduce(BigDecimal.ZERO, BigDecimal::add).defaultIfEmpty(BigDecimal.ZERO);
+        return orderWriteService.createFromCart();
     }
 }

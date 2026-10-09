@@ -83,16 +83,14 @@ public class ItemController {
     }
 
     @PostMapping("/{id}")
-    public Mono<String> postItem(@PathVariable("id") long id, @Valid @ModelAttribute ActionDto action, Model model) {
+    public Mono<String> postItem(@PathVariable("id") long id, @Valid @ModelAttribute ActionDto action) {
 
         var mono = switch (action.action) {
             case PLUS -> cartService.addToCart(id);
             case MINUS -> cartService.removeFromCart(id);
         };
 
-        return mono.then(itemService.retrieveById(id)).doOnNext(it -> model.addAttribute("item", it))
-                .then(Mono.just("item"));
-
+        return mono.then(Mono.just("redirect:/items/" + id));
     }
 
     public record ActionDto(PostItemsAction action) {
