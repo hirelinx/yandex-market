@@ -1,5 +1,6 @@
 package ru.yandex.practicum.market.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,7 +11,6 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
 import ru.yandex.practicum.market.mapper.ItemMapper;
-import ru.yandex.practicum.market.model.Cart;
 import ru.yandex.practicum.market.model.CartCountedItems;
 import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.repository.CartCountedItemsRepository;
@@ -23,7 +23,6 @@ import java.math.BigDecimal;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,7 +39,20 @@ class CartServiceImplTest {
     @Mock
     private ItemRepository itemRepository;
     @InjectMocks
+    private CartReadServiceImpl cartReadService;
+    @InjectMocks
+    private CartWriteServiceImpl cartWriteService;
     private CartServiceImpl cartService;
+
+    @BeforeEach
+    void setUp() {
+        cartWriteService.setCartReadService(cartReadService);
+
+        cartService = new CartServiceImpl(
+                cartReadService,
+                cartWriteService
+        );
+    }
 
     @Test
     void addToCart_newItem_returnsTrue() {
@@ -54,7 +66,8 @@ class CartServiceImplTest {
         when(cartCountedItemsRepository.findByCartId(1L)).thenReturn(Flux.empty());
         when(itemRepository.findById(1L)).thenReturn(Mono.just(item));
         when(countedItemRepository.save(any(CountedItem.class))).thenReturn(Mono.just(savedCountedItem));
-        when(cartCountedItemsRepository.save(any(CartCountedItems.class))).thenReturn(Mono.just(TestEntityFactory.cartLink(1L, 100L)));
+        when(cartCountedItemsRepository.save(any(CartCountedItems.class))).thenReturn(
+                Mono.just(TestEntityFactory.cartLink(1L, 100L)));
 
         StepVerifier.create(cartService.addToCart(1L))
                 .expectNext(true)

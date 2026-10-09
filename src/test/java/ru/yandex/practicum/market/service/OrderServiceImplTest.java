@@ -1,27 +1,24 @@
 package ru.yandex.practicum.market.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import ru.yandex.practicum.market.dto.ItemDto;
 import ru.yandex.practicum.market.dto.OrderDto;
 import ru.yandex.practicum.market.exception.EntityNotFoundException;
 import ru.yandex.practicum.market.mapper.ItemMapper;
 import ru.yandex.practicum.market.mapper.OrderMapper;
-import ru.yandex.practicum.market.dto.ItemDto;
-import ru.yandex.practicum.market.model.Cart;
-import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.model.Order;
 import ru.yandex.practicum.market.model.OrdersItems;
-import ru.yandex.practicum.market.model.Item;
 import ru.yandex.practicum.market.repository.*;
 import ru.yandex.practicum.market.support.TestEntityFactory;
-
-import org.reactivestreams.Publisher;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -51,7 +48,18 @@ class OrderServiceImplTest {
     @Mock
     private ItemRepository itemRepository;
     @InjectMocks
+    private OrderReadServiceImpl orderReadService;
+    @InjectMocks
+    private OrderWriteServiceImpl orderWriteService;
+    @InjectMocks
     private OrderServiceImpl orderService;
+
+    @BeforeEach
+    void setUp() {
+        orderWriteService.setOrderReadService(orderReadService);
+
+        orderService = new OrderServiceImpl(orderReadService, orderWriteService);
+    }
 
     @Test
     void retrieveOrders_mapsAllOrders() {
@@ -97,7 +105,8 @@ class OrderServiceImplTest {
                 .thenReturn(Flux.just(new OrdersItems(2L, 100L)));
         when(countedItemRepository.findAllById(any(Publisher.class))).thenReturn(Flux.just(countedItem));
         when(itemRepository.findById(5L)).thenReturn(Mono.just(item));
-        when(itemMapper.toDto(item, 3L)).thenReturn(new ItemDto(5L, "Товар", "desc", "files/test.jpg", BigDecimal.TEN, 3));
+        when(itemMapper.toDto(item, 3L)).thenReturn(
+                new ItemDto(5L, "Товар", "desc", "files/test.jpg", BigDecimal.TEN, 3));
         when(orderMapper.toDto(eq(order), eq(expectedTotal), any()))
                 .thenReturn(new OrderDto(2L, List.of(), expectedTotal));
 
