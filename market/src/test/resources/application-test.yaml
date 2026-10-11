@@ -11,3 +11,9 @@ spring:
 
 app:
   uploadsDir: ${java.io.tmpdir}/market-test-uploads/
+
+application:
+  pay:
+    base-url: http://localhost:18081
+    customer-account-id: 1
+    seller-account-id: 2
