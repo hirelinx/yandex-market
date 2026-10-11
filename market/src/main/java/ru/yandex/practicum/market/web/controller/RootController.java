@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
-import ru.yandex.practicum.market.dto.OrderDto;
+import ru.yandex.practicum.market.exception.PayServiceUnavailableException;
+import ru.yandex.practicum.market.exception.PaymentRejectedException;
 import ru.yandex.practicum.market.service.OrderService;
 
 import java.net.URI;
@@ -25,9 +26,12 @@ public class RootController {
 
     @PostMapping("/buy")
     public Mono<String> buy() {
-        var order = orderService.createFromCart();
-
-        return order.map(it -> "redirect:/orders/%s?newOrder=true".formatted(it.id()));
+        return orderService.createFromCart()
+                .map(it -> "redirect:/orders/%s?newOrder=true".formatted(it.id()))
+                .onErrorResume(PaymentRejectedException.class,
+                        ex -> Mono.just("redirect:/cart/items?paymentError=insufficient"))
+                .onErrorResume(PayServiceUnavailableException.class,
+                        ex -> Mono.just("redirect:/cart/items?paymentError=unavailable"));
     }
 
     @GetMapping

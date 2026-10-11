@@ -44,12 +44,14 @@
                 </div>
             </div>
         </div>
-        <div class="row p-2">
+        <div class="row p-2" th:if="${!items.isEmpty()}">
             <div class="col">
-                <form action="/buy" method="post" th:if="${!items.isEmpty()}">
+                <p th:if="${balance != null}" th:text="'Баланс: ' + ${balance} + ' руб.'"></p>
+                <p th:if="${checkoutMessage != null}" class="text-danger" th:text="${checkoutMessage}"></p>
+                <form action="/buy" method="post">
                     <div class="hstack gap-3">
                         <h2 th:text="'Итого: '+${total}+' руб.'"/>
-                        <button class="btn btn-warning ms-auto">Купить</button>
+                        <button class="btn btn-warning ms-auto" th:disabled="${!canCheckout}">Купить</button>
                     </div>
                 </form>
             </div>

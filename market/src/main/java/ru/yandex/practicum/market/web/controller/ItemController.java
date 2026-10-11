@@ -52,6 +52,7 @@ public class ItemController {
         var mono = switch (postItemRequest.action()) {
             case PLUS -> cartService.addToCart(postItemRequest.id());
             case MINUS -> cartService.removeFromCart(postItemRequest.id());
+            case DELETE -> cartService.deleteFromCart(postItemRequest.id());
         };
 
         return mono.then(Mono.just(
@@ -88,6 +89,7 @@ public class ItemController {
         var mono = switch (action.action) {
             case PLUS -> cartService.addToCart(id);
             case MINUS -> cartService.removeFromCart(id);
+            case DELETE -> cartService.deleteFromCart(id);
         };
 
         return mono.then(Mono.just("redirect:/items/" + id));
