@@ -8,15 +8,19 @@ import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import ru.yandex.practicum.market.dto.CartCheckoutInfo;
 import ru.yandex.practicum.market.repository.CartCountedItemsRepository;
 import ru.yandex.practicum.market.repository.CartRepository;
 import ru.yandex.practicum.market.repository.CountedItemRepository;
 import ru.yandex.practicum.market.repository.ItemRepository;
 import ru.yandex.practicum.market.repository.OrderRepository;
 import ru.yandex.practicum.market.repository.OrdersItemsRepository;
+import ru.yandex.practicum.market.service.PaymentService;
 import ru.yandex.practicum.market.support.TestEntityFactory;
 import ru.yandex.practicum.market.testcontainer.RedisTestContainer;
 
@@ -25,6 +29,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @AutoConfigureWebTestClient
@@ -48,8 +54,15 @@ class EndpointsIntegrationTest {
     private OrdersItemsRepository ordersItemsRepository;
     @Autowired
     private RedisConnectionFactory redisConnectionFactory;
+    @MockitoBean
+    private PaymentService paymentService;
+
     @BeforeEach
     void setUp() {
+        when(paymentService.getCheckoutInfo(any()))
+                .thenReturn(Mono.just(new CartCheckoutInfo(true, null, BigDecimal.valueOf(100_000))));
+        when(paymentService.payOrderAmount(any())).thenReturn(Mono.empty());
+
         redisConnectionFactory.getConnection().serverCommands().flushAll();
         ordersItemsRepository.deleteAll().block();
         orderRepository.deleteAll().block();
