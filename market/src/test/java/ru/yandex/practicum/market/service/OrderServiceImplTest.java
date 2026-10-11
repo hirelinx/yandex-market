@@ -47,6 +47,8 @@ class OrderServiceImplTest {
     private CountedItemRepository countedItemRepository;
     @Mock
     private ItemRepository itemRepository;
+    @Mock
+    private PaymentService paymentService;
     @InjectMocks
     private OrderReadServiceImpl orderReadService;
     @InjectMocks
@@ -135,6 +137,8 @@ class OrderServiceImplTest {
 
         when(cartService.retrieveCartEntity()).thenReturn(Mono.just(cart));
         when(cartService.getCountedItems(cart)).thenReturn(Flux.just(countedItem));
+        when(cartService.retrieveItems(cart)).thenReturn(Mono.just(List.of()));
+        when(paymentService.payOrderAmount(any(BigDecimal.class))).thenReturn(Mono.empty());
         when(orderRepository.save(any(Order.class))).thenReturn(Mono.just(savedOrder));
         when(ordersItemsRepository.saveAll(any(Flux.class))).thenReturn(Flux.just(new OrdersItems(3L, 10L)));
         when(cartCountedItemsRepository.deleteAll()).thenReturn(Mono.empty());

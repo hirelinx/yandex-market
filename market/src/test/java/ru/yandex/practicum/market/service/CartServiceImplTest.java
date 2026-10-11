@@ -152,6 +152,25 @@ class CartServiceImplTest {
     }
 
     @Test
+    void deleteFromCart_removesItemFromCart() {
+        var cart = TestEntityFactory.cart(1L);
+        var countedItem = TestEntityFactory.countedItem(1L, 3L);
+        countedItem.setId(100L);
+
+        when(cartRepository.findFirstBy()).thenReturn(Mono.just(cart));
+        when(cartCountedItemsRepository.findByCartId(1L)).thenReturn(Flux.just(TestEntityFactory.cartLink(1L, 100L)));
+        when(countedItemRepository.findById(100L)).thenReturn(Mono.just(countedItem));
+        when(cartCountedItemsRepository.deleteCartCountedItemsByCountedItemsId(100L)).thenReturn(Mono.empty());
+        when(countedItemRepository.delete(countedItem)).thenReturn(Mono.empty());
+
+        StepVerifier.create(cartService.deleteFromCart(1L))
+                .expectNext(true)
+                .verifyComplete();
+
+        verify(countedItemRepository).delete(countedItem);
+    }
+
+    @Test
     void retrieveCartEntity_returnsFirstCart() {
         var cart = TestEntityFactory.cart(1L);
         when(cartRepository.findFirstBy()).thenReturn(Mono.just(cart));
