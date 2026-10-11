@@ -1,0 +1,7 @@
+server:
+  port: 8080
+spring:
+  r2dbc:
+    url: ${PAY_DB_URL}
+    username: ${DB_USER:sa}
+    password: ${DB_PASS:}

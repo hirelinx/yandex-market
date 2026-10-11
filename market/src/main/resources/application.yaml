@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: market-app
+
+
+application:
+  pay:
+    base-url: ${PAY_BASE_URL:http://localhost:8081}
+    customer-account-id: ${PAY_CUSTOMER_ACCOUNT_ID:1}
+    seller-account-id: ${PAY_SELLER_ACCOUNT_ID:2}
+
