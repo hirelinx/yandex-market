@@ -7,12 +7,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.market.common.CartTotals;
 import ru.yandex.practicum.market.dto.OrderDto;
+import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.model.Order;
 import ru.yandex.practicum.market.model.OrdersItems;
 import ru.yandex.practicum.market.repository.CartCountedItemsRepository;
 import ru.yandex.practicum.market.repository.OrderRepository;
 import ru.yandex.practicum.market.repository.OrdersItemsRepository;
+
+import java.math.BigDecimal;
 
 @Primary
 @Service
@@ -20,6 +24,7 @@ import ru.yandex.practicum.market.repository.OrdersItemsRepository;
 public class OrderWriteServiceImpl implements OrderWriteService {
     private final OrderRepository orderRepository;
     private final CartService cartService;
+    private final PaymentService paymentService;
     private final OrdersItemsRepository ordersItemsRepository;
     private final CartCountedItemsRepository cartCountedItemsRepository;
     @Setter
@@ -28,15 +33,32 @@ public class OrderWriteServiceImpl implements OrderWriteService {
     @Override
     @Transactional
     public Mono<OrderDto> createFromCart() {
-        return cartService.retrieveCartEntity().flatMap(cart -> cartService.getCountedItems(cart).collectList().flatMap(
-                countedItems -> orderRepository.save(new Order()).flatMap(savedOrder ->
-                        ordersItemsRepository.saveAll(
-                                        Flux.fromIterable(
-                                                countedItems.stream().map(ci -> new OrdersItems(savedOrder.getId(), ci.getId()))
-                                                        .toList())).then(cartCountedItemsRepository.deleteAll())
-                                .doOnSuccess((it) -> {orderReadService.cacheEvictOrderById(savedOrder.getId());})
-                                .doOnSuccess((it) -> {orderReadService.cacheEvictOrders();})
-                                .doOnSuccess((it) -> cartService.cacheEvictCartItems())
-                                .then(orderReadService.retrieveById(savedOrder.getId())))));
+        return cartService.retrieveCartEntity().flatMap(cart ->
+                Mono.zip(
+                        cartService.getCountedItems(cart).collectList(),
+                        cartService.retrieveItems(cart)
+                ).flatMap(tuple -> {
+                    var countedItems = tuple.getT1();
+                    var items = tuple.getT2();
+                    if (countedItems.isEmpty()) {
+                        return Mono.error(new IllegalStateException("Cart is empty"));
+                    }
+                    BigDecimal total = CartTotals.totalOf(items);
+                    return paymentService.payOrderAmount(total).then(createOrder(countedItems));
+                }));
+    }
+
+    private Mono<OrderDto> createOrder(java.util.List<CountedItem> countedItems) {
+        return orderRepository.save(new Order()).flatMap(savedOrder ->
+                ordersItemsRepository.saveAll(
+                                Flux.fromIterable(
+                                        countedItems.stream()
+                                                .map(ci -> new OrdersItems(savedOrder.getId(), ci.getId()))
+                                                .toList()))
+                        .then(cartCountedItemsRepository.deleteAll())
+                        .doOnSuccess((it) -> orderReadService.cacheEvictOrderById(savedOrder.getId()))
+                        .doOnSuccess((it) -> orderReadService.cacheEvictOrders())
+                        .doOnSuccess((it) -> cartService.cacheEvictCartItems())
+                        .then(orderReadService.retrieveById(savedOrder.getId())));
     }
 }

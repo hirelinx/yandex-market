@@ -41,7 +41,7 @@ public class CartWriteServiceImpl implements CartWriteService {
                 saved -> cartCountedItemsRepository.save(new CartCountedItems(c.getId(), saved.getId()))
                         .thenReturn(true)))));
 
-        return addMono.doOnSuccess(result -> cartReadService.cacheEvictCartItems());
+        return addMono;
     }
 
     @Override
@@ -64,8 +64,18 @@ public class CartWriteServiceImpl implements CartWriteService {
             }
 
             return countedItemRepository.save(cartItem).then(Mono.just(true));
-        }).switchIfEmpty(Mono.just(false))
-                .doOnSuccess(result -> cartReadService.cacheEvictCartItems());
+        }).switchIfEmpty(Mono.just(false));
+    }
+
+    @Override
+    @Transactional
+    public Mono<Boolean> deleteFromCart(long itemId) {
+        return cartReadService.retrieveCartEntity()
+                .flatMap(cart -> findInCart(cart, itemId))
+                .flatMap(cartItem -> cartCountedItemsRepository.deleteCartCountedItemsByCountedItemsId(cartItem.getId())
+                        .then(countedItemRepository.delete(cartItem))
+                        .thenReturn(true))
+                .defaultIfEmpty(false);
     }
 
     private Mono<CountedItem> findInCart(Cart cart, long itemId) {

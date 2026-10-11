@@ -46,11 +46,23 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public Mono<@NonNull Boolean> addToCart(long itemId) {
-        return cartWriteService.addToCart(itemId);
+        return cartWriteService.addToCart(itemId)
+                .flatMap(result -> evictCartCache().thenReturn(result));
     }
 
     @Override
     public Mono<@NonNull Boolean> removeFromCart(long itemId) {
-        return cartWriteService.removeFromCart(itemId);
+        return cartWriteService.removeFromCart(itemId)
+                .flatMap(result -> evictCartCache().thenReturn(result));
+    }
+
+    @Override
+    public Mono<@NonNull Boolean> deleteFromCart(long itemId) {
+        return cartWriteService.deleteFromCart(itemId)
+                .flatMap(result -> evictCartCache().thenReturn(result));
+    }
+
+    private Mono<Void> evictCartCache() {
+        return Mono.fromRunnable(cartReadService::cacheEvictCartItems);
     }
 }
