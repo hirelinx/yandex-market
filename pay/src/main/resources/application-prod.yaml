@@ -1,5 +1,3 @@
-server:
-  port: 8080
 spring:
   r2dbc:
     url: ${PAY_DB_URL}
