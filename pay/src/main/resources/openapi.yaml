@@ -1,0 +1,56 @@
+openapi: 3.0.1
+info:
+  title: Pay API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Локальный сервер разработки
+
+paths:
+  /accounts/{accountId}/balance:
+    get:
+      operationId: getBalance
+      summary: Check balance
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Balance successfully checked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: number
+        '404':
+          description: Account not found
+  /transfers:
+    post:
+      operationId: executeTransfer
+      summary: Register a transfer between accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from:
+                  type: integer
+                to:
+                  type: integer
+                amount:
+                  type: number
+      responses:
+        '201':
+          description: Transfer successfully executed
+        '404':
+          description: One of accounts not found
+        '422':
+          description: Balance is less than needed

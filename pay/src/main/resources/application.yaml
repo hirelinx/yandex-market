@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: market-app
+
+  r2dbc:
+    url: r2dbc:h2:file:///${java.io.tmpdir}/pay;MODE=PostgreSQL;DATABASE_TO_UPPER=FALSE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+server:
+  port: ${SERVER_PORT:8081}
+
+application:
+  init-balance: 1000.0
+
+
