@@ -9,6 +9,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.market.common.CartTotals;
 import ru.yandex.practicum.market.dto.OrderDto;
+import ru.yandex.practicum.market.model.Cart;
 import ru.yandex.practicum.market.model.CountedItem;
 import ru.yandex.practicum.market.model.Order;
 import ru.yandex.practicum.market.model.OrdersItems;
@@ -44,18 +45,21 @@ public class OrderWriteServiceImpl implements OrderWriteService {
                         return Mono.error(new IllegalStateException("Cart is empty"));
                     }
                     BigDecimal total = CartTotals.totalOf(items);
-                    return paymentService.payOrderAmount(total).then(createOrder(countedItems));
+                    return paymentService.payOrderAmount(total).then(createOrder(cart, countedItems));
                 }));
     }
 
-    private Mono<OrderDto> createOrder(java.util.List<CountedItem> countedItems) {
-        return orderRepository.save(new Order()).flatMap(savedOrder ->
+    private Mono<OrderDto> createOrder(Cart cart, java.util.List<CountedItem> countedItems) {
+        var order = new Order();
+        order.setUserId(cart.getUserId());
+
+        return orderRepository.save(order).flatMap(savedOrder ->
                 ordersItemsRepository.saveAll(
                                 Flux.fromIterable(
                                         countedItems.stream()
                                                 .map(ci -> new OrdersItems(savedOrder.getId(), ci.getId()))
                                                 .toList()))
-                        .then(cartCountedItemsRepository.deleteAll())
+                        .then(cartCountedItemsRepository.deleteByCartId(cart.getId()))
                         .doOnSuccess((it) -> orderReadService.cacheEvictOrderById(savedOrder.getId()))
                         .doOnSuccess((it) -> orderReadService.cacheEvictOrders())
                         .doOnSuccess((it) -> cartService.cacheEvictCartItems())

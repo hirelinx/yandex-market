@@ -2,9 +2,12 @@ package ru.yandex.practicum.market.service;
 
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
+import lombok.Setter;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Primary;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,6 +21,7 @@ import ru.yandex.practicum.market.repository.CountedItemRepository;
 import ru.yandex.practicum.market.repository.ItemRepository;
 
 import java.util.List;
+import java.util.Objects;
 
 @Primary
 @Service
@@ -28,6 +32,9 @@ public class CartReadServiceImpl implements CartReadService {
     private final CartCountedItemsRepository cartCountedItemsRepository;
     private final CountedItemRepository countedItemRepository;
     private final ItemRepository itemRepository;
+    @Setter
+    private UserService userService;
+    private UserCartProvider userCartProvider;
 
     @Override
     public Flux<@NonNull CountedItem> getCountedItems(Cart cart) {
@@ -36,9 +43,9 @@ public class CartReadServiceImpl implements CartReadService {
     }
 
     @Override
-    @Cacheable(value = "cart")
     public Mono<@NonNull Cart> retrieveCartEntity() {
-        return cartRepository.findFirstBy();
+        return userService.getCurrentUser()
+                .flatMap(user -> userCartProvider.getOrCreate(user.getId()));
     }
 
     @Override
