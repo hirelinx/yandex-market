@@ -35,11 +35,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @EnableReactiveMethodSecurity
 public class SecurityConfig {
     @Bean
-    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http
-//                                                         ,ReactiveAuthenticationManager authenticationManager
-    ) {
-//        AuthenticationWebFilter authFilter = new AuthenticationWebFilter(authenticationManager);
-//        authFilter.setServerAuthenticationConverter(new ServerHttpBasicAuthenticationConverter());
+    public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
 
         DelegatingServerLogoutHandler logoutHandler = new DelegatingServerLogoutHandler(
                 new SecurityContextServerLogoutHandler(),
@@ -64,22 +60,9 @@ public class SecurityConfig {
                         exchanges
                                 .pathMatchers(HttpMethod.GET, "/", "/items/**", "/files/**").permitAll()
                                 .anyExchange().authenticated())
-
+                .oauth2Client(withDefaults())
                 .build();
     }
-
-//    @Bean
-//    public ReactiveAuthenticationManager reactiveAuthenticationManager(
-//            ReactiveUserDetailsService userDetailsService,
-//            PasswordEncoder passwordEncoder
-//    ) {
-//        UserDetailsRepositoryReactiveAuthenticationManager manager =
-//                new UserDetailsRepositoryReactiveAuthenticationManager(userDetailsService);
-//
-//        manager.setPasswordEncoder(passwordEncoder);
-//        return manager;
-//
-//    }
 
     @Bean
     public ReactiveUserDetailsService userDetailsService(UserRepository userRepository) {

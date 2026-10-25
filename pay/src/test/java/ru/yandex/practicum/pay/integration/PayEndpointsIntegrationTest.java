@@ -14,6 +14,8 @@ import ru.yandex.practicum.pay.support.TestAccountFactory;
 
 import java.math.BigDecimal;
 
+import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockJwt;
+
 @SpringBootTest
 @AutoConfigureWebTestClient
 @ActiveProfiles("test")
@@ -25,11 +27,13 @@ class PayEndpointsIntegrationTest {
     @Autowired
     private AccountsRepository accountsRepository;
 
+    private WebTestClient authorizedClient;
     private Integer fromAccountId;
     private Integer toAccountId;
 
     @BeforeEach
     void setUp() {
+        authorizedClient = webTestClient.mutateWith(mockJwt());
         accountsRepository.deleteAll().block();
         fromAccountId = accountsRepository.save(TestAccountFactory.account(1000)).block().getId();
         toAccountId = accountsRepository.save(TestAccountFactory.account(500)).block().getId();
@@ -37,7 +41,7 @@ class PayEndpointsIntegrationTest {
 
     @Test
     void getBalance_returnsCurrentBalance() {
-        webTestClient.get()
+        authorizedClient.get()
                 .uri("/accounts/{id}/balance", fromAccountId)
                 .exchange()
                 .expectStatus().isOk()
@@ -58,7 +62,7 @@ class PayEndpointsIntegrationTest {
     void executeTransfer_toAccountCreatedByGetBalance_updatesBothBalances() {
         expectBalance(888_888, BigDecimal.valueOf(1000));
 
-        webTestClient.post()
+        authorizedClient.post()
                 .uri("/transfers")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("""
@@ -73,7 +77,7 @@ class PayEndpointsIntegrationTest {
 
     @Test
     void executeTransfer_updatesBothBalances() {
-        webTestClient.post()
+        authorizedClient.post()
                 .uri("/transfers")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("""
@@ -88,7 +92,7 @@ class PayEndpointsIntegrationTest {
 
     @Test
     void executeTransfer_returnsNotFoundWhenAccountMissing() {
-        webTestClient.post()
+        authorizedClient.post()
                 .uri("/transfers")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("""
@@ -100,7 +104,7 @@ class PayEndpointsIntegrationTest {
 
     @Test
     void executeTransfer_returnsUnprocessableWhenNotEnoughMoney() {
-        webTestClient.post()
+        authorizedClient.post()
                 .uri("/transfers")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue("""
@@ -113,8 +117,31 @@ class PayEndpointsIntegrationTest {
         expectBalance(toAccountId, BigDecimal.valueOf(500));
     }
 
-    private void expectBalance(Integer accountId, BigDecimal expected) {
+    @Test
+    void getBalance_withoutToken_returnsUnauthorized() {
         webTestClient.get()
+                .uri("/accounts/{id}/balance", fromAccountId)
+                .exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    void executeTransfer_withoutToken_returnsUnauthorizedAndKeepsBalances() {
+        webTestClient.post()
+                .uri("/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"from":%d,"to":%d,"amount":250}
+                        """.formatted(fromAccountId, toAccountId))
+                .exchange()
+                .expectStatus().isUnauthorized();
+
+        expectBalance(fromAccountId, BigDecimal.valueOf(1000));
+        expectBalance(toAccountId, BigDecimal.valueOf(500));
+    }
+
+    private void expectBalance(Integer accountId, BigDecimal expected) {
+        authorizedClient.get()
                 .uri("/accounts/{id}/balance", accountId)
                 .exchange()
                 .expectStatus().isOk()

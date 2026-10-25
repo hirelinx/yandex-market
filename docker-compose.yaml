@@ -5,6 +5,28 @@ services:
     ports:
       - "6379:6379"
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: market-keycloak
+    # realm market-app с клиентами импортируется из ./keycloak при каждом старте
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+      CLIENT_TOKEN: ${CLIENT_TOKEN}
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # в образе Keycloak нет curl, health отдаётся на management-порту 9000
+      test: [ "CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
   pay:
     build:
       context: ./pay
@@ -18,6 +40,9 @@ services:
       - .env
     volumes:
       - pay-data:/data
+    depends_on:
+      keycloak:
+        condition: service_healthy
 
   app:
     build:
@@ -33,8 +58,12 @@ services:
     volumes:
       - market-data:/data
     depends_on:
-      - pay
-      - redis
+      pay:
+        condition: service_started
+      redis:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
 
 volumes:
   market-data:
