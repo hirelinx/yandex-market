@@ -12,4 +12,6 @@ public interface CartCountedItemsRepository extends R2dbcRepository<CartCountedI
     Flux<CartCountedItems> findByCountedItemsId(Long itemId);
 
     Mono<Void> deleteCartCountedItemsByCountedItemsId(Long countedItemsId);
+
+    Mono<Void> deleteByCartId(Long cartId);
 }
