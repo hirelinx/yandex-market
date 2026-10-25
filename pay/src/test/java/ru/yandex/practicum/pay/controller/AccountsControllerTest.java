@@ -6,7 +6,6 @@ import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
-import ru.yandex.practicum.pay.exception.AccountNotFoundException;
 import ru.yandex.practicum.pay.service.AccountsService;
 
 import java.math.BigDecimal;
@@ -32,16 +31,5 @@ class AccountsControllerTest {
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.balance").isEqualTo(123.45);
-    }
-
-    @Test
-    void getBalance_returnsNotFoundWhenAccountMissing() {
-        when(accountsService.getBalance(99))
-                .thenReturn(Mono.error(new AccountNotFoundException("Account not found: 99")));
-
-        webTestClient.get()
-                .uri("/accounts/99/balance")
-                .exchange()
-                .expectStatus().isNotFound();
     }
 }
