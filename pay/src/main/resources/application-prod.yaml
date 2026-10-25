@@ -3,3 +3,9 @@ spring:
     url: ${PAY_DB_URL}
     username: ${DB_USER:sa}
     password: ${DB_PASS:}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # должен совпадать с iss в токене: market получает токен по этому же адресу
+          issuer-uri: ${ISSUER_URI}

@@ -11,6 +11,13 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Указываем полный путь до нашего Realm в Keycloak
+          issuer-uri: ${ISSUER_URI:http://localhost:8082/realms/market-app}
+
 server:
   port: ${SERVER_PORT:8081}
 
