@@ -11,9 +11,16 @@ spring:
 
 app:
   uploadsDir: ${java.io.tmpdir}/market-test-uploads/
+  users:
+    - username: user1
+      password-hash: $2a$10$SerGkqnGbG3rcw7GTBfiremT9zoxLqgeynLZ.XF9GNy72nzirzzrW
+    - username: user2
+      password-hash: $2a$10$SerGkqnGbG3rcw7GTBfiremT9zoxLqgeynLZ.XF9GNy72nzirzzrW
+  seller-user:
+    username: seller
+    password-hash: $2a$10$SerGkqnGbG3rcw7GTBfiremT9zoxLqgeynLZ.XF9GNy72nzirzzrW
 
 application:
   pay:
     base-url: http://localhost:18081
-    customer-account-id: 1
-    seller-account-id: 2
+
