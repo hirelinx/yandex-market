@@ -23,7 +23,7 @@ public class TransfersController implements TransfersApi {
                                                       ServerWebExchange exchange) {
 
         return executeTransferRequest
-                .flatMap(it -> accountsService.transfer(it))
+                .flatMap(accountsService::transfer)
                 .then(executeTransferRequest.map(req ->
                         ResponseEntity.created(URI.create("/accounts/" + req.getFrom() + "/balance"))
                                 .<Void>build()))
