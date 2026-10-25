@@ -1,10 +1,11 @@
 package ru.yandex.practicum.pay.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.pay.dto.ExecuteTransferRequest;
@@ -18,16 +19,24 @@ import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AccountsServiceImplTest {
 
+    private static final BigDecimal INITIAL_BALANCE = BigDecimal.valueOf(1000);
+
     @Mock
     private AccountsRepository accountsRepository;
 
-    @InjectMocks
     private AccountsServiceImpl accountsService;
+
+    @BeforeEach
+    void setUp() {
+        accountsService = new AccountsServiceImpl(accountsRepository, INITIAL_BALANCE);
+    }
 
     @Test
     void getBalance_returnsBalanceWhenAccountExists() {
@@ -41,12 +50,43 @@ class AccountsServiceImplTest {
     }
 
     @Test
-    void getBalance_failsWhenAccountMissing() {
-        when(accountsRepository.findById(42)).thenReturn(Mono.empty());
+    void getBalance_createsAccountWithInitialBalanceWhenMissing() {
+        Account created = TestAccountFactory.account(INITIAL_BALANCE);
+        created.setId(42);
+        when(accountsRepository.findById(42)).thenReturn(Mono.empty(), Mono.just(created));
+        when(accountsRepository.insert(42, INITIAL_BALANCE)).thenReturn(Mono.empty());
 
         StepVerifier.create(accountsService.getBalance(42))
-                .expectError(AccountNotFoundException.class)
-                .verify();
+                .expectNextMatches(balance -> balance.compareTo(INITIAL_BALANCE) == 0)
+                .verifyComplete();
+
+        verify(accountsRepository).insert(42, INITIAL_BALANCE);
+    }
+
+    @Test
+    void getBalance_returnsExistingBalanceWhenAccountCreatedConcurrently() {
+        Account concurrent = TestAccountFactory.account(BigDecimal.valueOf(900));
+        concurrent.setId(42);
+        when(accountsRepository.findById(42)).thenReturn(Mono.empty(), Mono.just(concurrent));
+        when(accountsRepository.insert(42, INITIAL_BALANCE))
+                .thenReturn(Mono.error(new DuplicateKeyException("duplicate id 42")));
+
+        StepVerifier.create(accountsService.getBalance(42))
+                .expectNextMatches(balance -> balance.compareTo(BigDecimal.valueOf(900)) == 0)
+                .verifyComplete();
+    }
+
+    @Test
+    void getBalance_doesNotCreateExistingAccount() {
+        Account account = TestAccountFactory.account(BigDecimal.valueOf(250));
+        account.setId(1);
+        when(accountsRepository.findById(1)).thenReturn(Mono.just(account));
+
+        StepVerifier.create(accountsService.getBalance(1))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        verify(accountsRepository, never()).insert(any(), any());
     }
 
     @Test
