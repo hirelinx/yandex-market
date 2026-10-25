@@ -27,6 +27,18 @@ class AccountsRepositoryTest {
     }
 
     @Test
+    void insert_createsAccountWithGivenId() {
+        StepVerifier.create(
+                        accountsRepository.deleteById(777_777)
+                                .then(accountsRepository.insert(777_777, BigDecimal.valueOf(1000)))
+                                .then(accountsRepository.findById(777_777))
+                )
+                .expectNextMatches(found -> found.getId() == 777_777
+                        && found.getBalance().compareTo(BigDecimal.valueOf(1000)) == 0)
+                .verifyComplete();
+    }
+
+    @Test
     void findById_returnsEmptyWhenMissing() {
         StepVerifier.create(accountsRepository.findById(999_999))
                 .verifyComplete();
