@@ -3,10 +3,13 @@ package ru.yandex.practicum.market.web.controller;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.market.config.WebFluxSecurityTestConfig;
 import ru.yandex.practicum.market.dto.OrderDto;
 import ru.yandex.practicum.market.service.OrderService;
 
@@ -17,12 +20,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(OrderController.class)
+@Import(WebFluxSecurityTestConfig.class)
 class OrderControllerTest {
     @Autowired
     private WebTestClient webTestClient;
     @MockitoBean
     private OrderService orderService;
 
+    @WithMockUser(username = "user")
     @Test
     void getOrders_returnsOrdersView() {
         when(orderService.retrieveOrders())
@@ -34,6 +39,7 @@ class OrderControllerTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user")
     @Test
     void getOrders_rendersAllOrdersFromFlux() {
         when(orderService.retrieveOrders()).thenReturn(Flux.just(
@@ -52,6 +58,7 @@ class OrderControllerTest {
                 });
     }
 
+    @WithMockUser(username = "user")
     @Test
     void getOrder_returnsOrderView() {
         when(orderService.retrieveById(5L))

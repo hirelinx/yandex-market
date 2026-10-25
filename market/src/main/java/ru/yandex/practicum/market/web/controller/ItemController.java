@@ -3,6 +3,7 @@ package ru.yandex.practicum.market.web.controller;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -60,6 +61,7 @@ public class ItemController {
                         postItemRequest.sort().name(), postItemRequest.pageNumber(), postItemRequest.pageSize())));
     }
 
+    @PreAuthorize("isAuthenticated()")
     @GetMapping("/new")
     public Mono<String> getNewItem(Model model) {
         model.addAttribute("itemCreateRequest", new ItemCreateRequest());

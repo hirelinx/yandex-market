@@ -1,20 +1,22 @@
 package ru.yandex.practicum.market.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.market.client.PayClient;
-import ru.yandex.practicum.market.config.PayProperties;
+import ru.yandex.practicum.market.config.AppProperties;
 import ru.yandex.practicum.market.exception.PayServiceUnavailableException;
 import ru.yandex.practicum.market.exception.PaymentRejectedException;
+import ru.yandex.practicum.market.support.TestEntityFactory;
 
 import java.math.BigDecimal;
+import java.util.List;
 
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,14 +26,23 @@ class PaymentServiceImplTest {
     private PayClient payClient;
 
     @Mock
-    private PayProperties payProperties;
+    private UserService userService;
 
-    @InjectMocks
     private PaymentServiceImpl paymentService;
+
+    @BeforeEach
+    void setUp() {
+        var appProperties = new AppProperties(
+                null,
+                List.of(),
+                new AppProperties.UserProperties("seller", "neverlogin")
+        );
+        paymentService = new PaymentServiceImpl(payClient, userService, appProperties);
+    }
 
     @Test
     void getCheckoutInfo_allowsCheckoutWhenBalanceCoversTotal() {
-        when(payProperties.customerAccountId()).thenReturn(1);
+        when(userService.getCurrentUser()).thenReturn(Mono.just(TestEntityFactory.user(1L, "customer", "neverlogin")));
         when(payClient.getBalance(1)).thenReturn(Mono.just(BigDecimal.valueOf(500)));
 
         StepVerifier.create(paymentService.getCheckoutInfo(BigDecimal.valueOf(100)))
@@ -41,7 +52,7 @@ class PaymentServiceImplTest {
 
     @Test
     void getCheckoutInfo_disablesCheckoutWhenBalanceTooLow() {
-        when(payProperties.customerAccountId()).thenReturn(1);
+        when(userService.getCurrentUser()).thenReturn(Mono.just(TestEntityFactory.user(1L, "customer", "neverlogin")));
         when(payClient.getBalance(1)).thenReturn(Mono.just(BigDecimal.TEN));
 
         StepVerifier.create(paymentService.getCheckoutInfo(BigDecimal.valueOf(100)))
@@ -51,7 +62,7 @@ class PaymentServiceImplTest {
 
     @Test
     void getCheckoutInfo_disablesCheckoutWhenPayUnavailable() {
-        when(payProperties.customerAccountId()).thenReturn(1);
+        when(userService.getCurrentUser()).thenReturn(Mono.just(TestEntityFactory.user(1L, "customer", "neverlogin")));
         when(payClient.getBalance(1)).thenReturn(Mono.error(new PayServiceUnavailableException("down")));
 
         StepVerifier.create(paymentService.getCheckoutInfo(BigDecimal.TEN))
@@ -61,7 +72,7 @@ class PaymentServiceImplTest {
 
     @Test
     void getCheckoutInfo_disablesCheckoutWhenBalanceRequestRejected() {
-        when(payProperties.customerAccountId()).thenReturn(1);
+        when(userService.getCurrentUser()).thenReturn(Mono.just(TestEntityFactory.user(1L, "customer", "neverlogin")));
         when(payClient.getBalance(1)).thenReturn(Mono.error(new PaymentRejectedException("Payment was rejected")));
 
         StepVerifier.create(paymentService.getCheckoutInfo(BigDecimal.TEN))
@@ -71,13 +82,30 @@ class PaymentServiceImplTest {
 
     @Test
     void payOrderAmount_transfersFromCustomerToSeller() {
-        when(payProperties.customerAccountId()).thenReturn(1);
-        when(payProperties.sellerAccountId()).thenReturn(2);
+        when(userService.getCurrentUser()).thenReturn(Mono.just(TestEntityFactory.user(1L, "customer", "neverlogin")));
+        when(userService.findByUsername("seller")).thenReturn(Mono.just(TestEntityFactory.user(2L, "seller", "neverlogin")));
+        when(payClient.getBalance(1)).thenReturn(Mono.just(BigDecimal.valueOf(1000)));
+        when(payClient.getBalance(2)).thenReturn(Mono.just(BigDecimal.valueOf(1000)));
         when(payClient.transfer(1, 2, BigDecimal.TEN)).thenReturn(Mono.empty());
 
         StepVerifier.create(paymentService.payOrderAmount(BigDecimal.TEN))
                 .verifyComplete();
 
-        verify(payClient).transfer(1, 2, BigDecimal.TEN);
+        var inOrder = inOrder(payClient);
+        inOrder.verify(payClient).getBalance(2);
+        inOrder.verify(payClient).transfer(1, 2, BigDecimal.TEN);
+    }
+
+    @Test
+    void payOrderAmount_failsWhenPayUnavailable() {
+        when(userService.getCurrentUser()).thenReturn(Mono.just(TestEntityFactory.user(1L, "customer", "neverlogin")));
+        when(userService.findByUsername("seller")).thenReturn(Mono.just(TestEntityFactory.user(2L, "seller", "neverlogin")));
+        when(payClient.getBalance(1)).thenReturn(Mono.just(BigDecimal.valueOf(1000)));
+        when(payClient.getBalance(2)).thenReturn(Mono.error(new PayServiceUnavailableException("down")));
+        when(payClient.transfer(1, 2, BigDecimal.TEN)).thenReturn(Mono.empty());
+
+        StepVerifier.create(paymentService.payOrderAmount(BigDecimal.TEN))
+                .expectError(PayServiceUnavailableException.class)
+                .verify();
     }
 }

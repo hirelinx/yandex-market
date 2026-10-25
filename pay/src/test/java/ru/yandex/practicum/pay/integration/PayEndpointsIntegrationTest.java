@@ -8,6 +8,7 @@ import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTest
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.pay.repository.AccountsRepository;
 import ru.yandex.practicum.pay.support.TestAccountFactory;
 
@@ -45,11 +46,29 @@ class PayEndpointsIntegrationTest {
     }
 
     @Test
-    void getBalance_returnsNotFoundForUnknownAccount() {
-        webTestClient.get()
-                .uri("/accounts/999999/balance")
+    void getBalance_createsUnknownAccountWithInitialBalance() {
+        expectBalance(999_999, BigDecimal.valueOf(1000));
+
+        StepVerifier.create(accountsRepository.findById(999_999))
+                .expectNextMatches(account -> account.getBalance().compareTo(BigDecimal.valueOf(1000)) == 0)
+                .verifyComplete();
+    }
+
+    @Test
+    void executeTransfer_toAccountCreatedByGetBalance_updatesBothBalances() {
+        expectBalance(888_888, BigDecimal.valueOf(1000));
+
+        webTestClient.post()
+                .uri("/transfers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"from":%d,"to":888888,"amount":100}
+                        """.formatted(fromAccountId))
                 .exchange()
-                .expectStatus().isNotFound();
+                .expectStatus().isCreated();
+
+        expectBalance(fromAccountId, BigDecimal.valueOf(900));
+        expectBalance(888_888, BigDecimal.valueOf(1100));
     }
 
     @Test

@@ -8,6 +8,7 @@ import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.codec.multipart.FilePart;
 import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
+import ru.yandex.practicum.market.config.AppProperties;
 import ru.yandex.practicum.market.exception.NoSuchFileException;
 
 import java.nio.file.Path;
@@ -24,7 +25,8 @@ class FilesServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        filesService = new FilesServiceImpl(tempDir.toString() + "/");
+        AppProperties appProperties = new AppProperties(tempDir.toString() + "/", null, null);
+        filesService = new FilesServiceImpl(appProperties);
     }
 
     @Test

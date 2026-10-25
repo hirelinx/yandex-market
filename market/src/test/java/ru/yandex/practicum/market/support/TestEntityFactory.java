@@ -1,14 +1,21 @@
 package ru.yandex.practicum.market.support;
 
-import ru.yandex.practicum.market.model.Cart;
-import ru.yandex.practicum.market.model.CartCountedItems;
-import ru.yandex.practicum.market.model.CountedItem;
-import ru.yandex.practicum.market.model.Item;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import ru.yandex.practicum.market.model.*;
 
 import java.math.BigDecimal;
 
 public final class TestEntityFactory {
     private TestEntityFactory() {
+    }
+
+    public static User user(long id, String username, String passwordHash) {
+        var entity = new User();
+        entity.setId(id);
+        entity.setUsername(username);
+        entity.setPasswordHash(passwordHash);
+        return entity;
     }
 
     public static Item item(String title, BigDecimal price) {
@@ -20,10 +27,18 @@ public final class TestEntityFactory {
         return entity;
     }
 
-    public static Cart cart(long id) {
+    public static Cart cart(long id, long userId) {
         var cart = new Cart();
         cart.setId(id);
+        cart.setUserId(userId);
         return cart;
+    }
+
+    public static Order order(long id, long userId) {
+        var order = new Order();
+        order.setId(id);
+        order.setUserId(userId);
+        return order;
     }
 
     public static CountedItem countedItem(long itemId, long count) {

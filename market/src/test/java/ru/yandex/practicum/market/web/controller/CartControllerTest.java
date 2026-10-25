@@ -3,9 +3,13 @@ package ru.yandex.practicum.market.web.controller;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.market.config.WebFluxSecurityTestConfig;
 import ru.yandex.practicum.market.dto.CartCheckoutInfo;
 import ru.yandex.practicum.market.dto.ItemDto;
 import ru.yandex.practicum.market.model.Cart;
@@ -20,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(CartController.class)
+@Import(WebFluxSecurityTestConfig.class)
 class CartControllerTest {
     @Autowired
     private WebTestClient webTestClient;
@@ -28,6 +33,7 @@ class CartControllerTest {
     @MockitoBean
     private PaymentService paymentService;
 
+    @WithMockUser(username = "user")
     @Test
     void getCartItems_returnsCartView() {
         var cart = new Cart();
@@ -44,6 +50,7 @@ class CartControllerTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user")
     @Test
     void postCartItems_plusAction_returnsCartView() {
         var cart = new Cart();
@@ -55,7 +62,9 @@ class CartControllerTest {
         when(paymentService.getCheckoutInfo(any()))
                 .thenReturn(Mono.just(new CartCheckoutInfo(true, null, BigDecimal.valueOf(100))));
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/cart/items")
                         .queryParam("id", 2)
                         .queryParam("action", "PLUS")

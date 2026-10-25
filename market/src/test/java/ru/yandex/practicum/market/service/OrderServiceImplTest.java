@@ -3,6 +3,7 @@ package ru.yandex.practicum.market.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -17,14 +18,18 @@ import ru.yandex.practicum.market.mapper.ItemMapper;
 import ru.yandex.practicum.market.mapper.OrderMapper;
 import ru.yandex.practicum.market.model.Order;
 import ru.yandex.practicum.market.model.OrdersItems;
+import ru.yandex.practicum.market.model.User;
 import ru.yandex.practicum.market.repository.*;
 import ru.yandex.practicum.market.support.TestEntityFactory;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,11 +39,11 @@ class OrderServiceImplTest {
     @Mock
     private CartService cartService;
     @Mock
+    private UserService userService;
+    @Mock
     private OrderMapper orderMapper;
     @Mock
     private ItemMapper itemMapper;
-    @Mock
-    private CartRepository cartRepository;
     @Mock
     private OrdersItemsRepository ordersItemsRepository;
     @Mock
@@ -50,40 +55,59 @@ class OrderServiceImplTest {
     @Mock
     private PaymentService paymentService;
     @InjectMocks
-    private OrderReadServiceImpl orderReadService;
-    @InjectMocks
     private OrderWriteServiceImpl orderWriteService;
-    @InjectMocks
     private OrderServiceImpl orderService;
+
+    private final User currentUser = TestEntityFactory.user(7L, "user", "neverlogin");
 
     @BeforeEach
     void setUp() {
+        var userOrdersProvider = new UserOrdersProvider(
+                orderRepository,
+                orderMapper,
+                itemMapper,
+                ordersItemsRepository,
+                countedItemRepository,
+                itemRepository
+        );
+        var orderReadService = new OrderReadServiceImpl(userService, userOrdersProvider);
         orderWriteService.setOrderReadService(orderReadService);
 
         orderService = new OrderServiceImpl(orderReadService, orderWriteService);
     }
 
     @Test
-    void retrieveOrders_mapsAllOrders() {
-        var order = new Order();
-        order.setId(1L);
+    void retrieveOrders_returnsOnlyCurrentUserOrders() {
+        var order = TestEntityFactory.order(1L, currentUser.getId());
         var dto = new OrderDto(1L, List.of(), BigDecimal.ZERO);
 
-        when(orderRepository.findAll()).thenReturn(Flux.just(order));
+        when(userService.getCurrentUser()).thenReturn(Mono.just(currentUser));
+        when(orderRepository.findAllByUserId(currentUser.getId())).thenReturn(Flux.just(order));
         when(ordersItemsRepository.findByOrderId(1L)).thenReturn(Flux.empty());
         when(orderMapper.toDto(any(Order.class), any(BigDecimal.class), any())).thenReturn(dto);
 
         StepVerifier.create(orderService.retrieveOrders())
                 .expectNext(dto)
                 .verifyComplete();
+
+        verify(orderRepository, never()).findAll();
+    }
+
+    @Test
+    void retrieveOrders_withoutCurrentUser_returnsEmpty() {
+        when(userService.getCurrentUser()).thenReturn(Mono.empty());
+
+        StepVerifier.create(orderService.retrieveOrders())
+                .verifyComplete();
     }
 
     @Test
     void retrieveById_existingOrder_returnsDto() {
-        var order = new Order();
-        order.setId(2L);
+        var order = TestEntityFactory.order(2L, currentUser.getId());
         var dto = new OrderDto(2L, List.of(), BigDecimal.TEN);
-        when(orderRepository.findById(2L)).thenReturn(Mono.just(order));
+
+        when(userService.getCurrentUser()).thenReturn(Mono.just(currentUser));
+        when(orderRepository.findByIdAndUserId(2L, currentUser.getId())).thenReturn(Mono.just(order));
         when(ordersItemsRepository.findByOrderId(2L)).thenReturn(Flux.empty());
         when(orderMapper.toDto(any(Order.class), any(BigDecimal.class), any())).thenReturn(dto);
 
@@ -94,15 +118,15 @@ class OrderServiceImplTest {
 
     @Test
     void retrieveById_calculatesTotalAsPriceTimesCount() {
-        var order = new Order();
-        order.setId(2L);
+        var order = TestEntityFactory.order(2L, currentUser.getId());
         var countedItem = TestEntityFactory.countedItem(5L, 3L);
         countedItem.setId(100L);
         var item = TestEntityFactory.item("Товар", BigDecimal.TEN);
         item.setId(5L);
         var expectedTotal = BigDecimal.valueOf(30);
 
-        when(orderRepository.findById(2L)).thenReturn(Mono.just(order));
+        when(userService.getCurrentUser()).thenReturn(Mono.just(currentUser));
+        when(orderRepository.findByIdAndUserId(2L, currentUser.getId())).thenReturn(Mono.just(order));
         when(ordersItemsRepository.findByOrderId(2L))
                 .thenReturn(Flux.just(new OrdersItems(2L, 100L)));
         when(countedItemRepository.findAllById(any(Publisher.class))).thenReturn(Flux.just(countedItem));
@@ -119,7 +143,8 @@ class OrderServiceImplTest {
 
     @Test
     void retrieveById_missingOrder_emitsEntityNotFoundException() {
-        when(orderRepository.findById(99L)).thenReturn(Mono.empty());
+        when(userService.getCurrentUser()).thenReturn(Mono.just(currentUser));
+        when(orderRepository.findByIdAndUserId(99L, currentUser.getId())).thenReturn(Mono.empty());
 
         StepVerifier.create(orderService.retrieveById(99L))
                 .expectError(EntityNotFoundException.class)
@@ -127,12 +152,23 @@ class OrderServiceImplTest {
     }
 
     @Test
-    void createFromCart_createsOrderAndClearsCartLinks() {
-        var cart = TestEntityFactory.cart(1L);
+    void retrieveById_orderOfAnotherUser_emitsEntityNotFoundException() {
+        when(userService.getCurrentUser()).thenReturn(Mono.just(currentUser));
+        when(orderRepository.findByIdAndUserId(5L, currentUser.getId())).thenReturn(Mono.empty());
+
+        StepVerifier.create(orderService.retrieveById(5L))
+                .expectError(EntityNotFoundException.class)
+                .verify();
+
+        verify(orderRepository, never()).findById(5L);
+    }
+
+    @Test
+    void createFromCart_createsOrderForCartOwnerAndClearsOnlyThisCart() {
+        var cart = TestEntityFactory.cart(1L, currentUser.getId());
         var countedItem = TestEntityFactory.countedItem(1L, 1L);
         countedItem.setId(10L);
-        var savedOrder = new Order();
-        savedOrder.setId(3L);
+        var savedOrder = TestEntityFactory.order(3L, currentUser.getId());
         var dto = new OrderDto(3L, List.of(), BigDecimal.ZERO);
 
         when(cartService.retrieveCartEntity()).thenReturn(Mono.just(cart));
@@ -141,13 +177,19 @@ class OrderServiceImplTest {
         when(paymentService.payOrderAmount(any(BigDecimal.class))).thenReturn(Mono.empty());
         when(orderRepository.save(any(Order.class))).thenReturn(Mono.just(savedOrder));
         when(ordersItemsRepository.saveAll(any(Flux.class))).thenReturn(Flux.just(new OrdersItems(3L, 10L)));
-        when(cartCountedItemsRepository.deleteAll()).thenReturn(Mono.empty());
-        when(orderRepository.findById(3L)).thenReturn(Mono.just(savedOrder));
+        when(cartCountedItemsRepository.deleteByCartId(1L)).thenReturn(Mono.empty());
+        when(userService.getCurrentUser()).thenReturn(Mono.just(currentUser));
+        when(orderRepository.findByIdAndUserId(3L, currentUser.getId())).thenReturn(Mono.just(savedOrder));
         when(ordersItemsRepository.findByOrderId(3L)).thenReturn(Flux.empty());
         when(orderMapper.toDto(any(Order.class), any(BigDecimal.class), any())).thenReturn(dto);
 
         StepVerifier.create(orderService.createFromCart())
                 .expectNext(dto)
                 .verifyComplete();
+
+        var orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
+        assertThat(orderCaptor.getValue().getUserId()).isEqualTo(currentUser.getId());
+        verify(cartCountedItemsRepository, never()).deleteAll();
     }
 }

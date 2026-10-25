@@ -62,7 +62,7 @@ class ItemServiceImplTest {
         when(itemRepository.findAllByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", "",
                 PageRequest.of(0, 5)))
                 .thenReturn(Flux.just(item));
-        when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L)));
+        when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L, 0L)));
         when(cartService.getCountedItems(any(Cart.class))).thenReturn(Flux.just(countedItem));
         when(itemMapper.toDto(item, 2L)).thenReturn(
                 new ItemDto(1L, "Молоко", "desc", "files/test.jpg", BigDecimal.TEN, 2));
@@ -79,7 +79,7 @@ class ItemServiceImplTest {
         var item = TestEntityFactory.item("Хлеб", BigDecimal.ONE);
         item.setId(5L);
         when(itemRepository.findById(5L)).thenReturn(Mono.just(item));
-        when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L)));
+        when(cartService.retrieveCartEntity()).thenReturn(Mono.just(TestEntityFactory.cart(1L, 0L)));
         when(cartService.getCountedItems(any(Cart.class))).thenReturn(Flux.empty());
         when(itemMapper.toDto(item, 0L)).thenReturn(
                 new ItemDto(5L, "Хлеб", "desc", "files/test.jpg", BigDecimal.ONE, 0));

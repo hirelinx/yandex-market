@@ -7,19 +7,24 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.market.dto.CartCheckoutInfo;
+import ru.yandex.practicum.market.model.Order;
 import ru.yandex.practicum.market.repository.CartCountedItemsRepository;
 import ru.yandex.practicum.market.repository.CartRepository;
 import ru.yandex.practicum.market.repository.CountedItemRepository;
 import ru.yandex.practicum.market.repository.ItemRepository;
 import ru.yandex.practicum.market.repository.OrderRepository;
 import ru.yandex.practicum.market.repository.OrdersItemsRepository;
+import ru.yandex.practicum.market.repository.UserRepository;
 import ru.yandex.practicum.market.service.PaymentService;
 import ru.yandex.practicum.market.support.TestEntityFactory;
 import ru.yandex.practicum.market.testcontainer.RedisTestContainer;
@@ -46,6 +51,8 @@ class EndpointsIntegrationTest {
     private CountedItemRepository countedItemRepository;
     @Autowired
     private CartRepository cartRepository;
+    @Autowired
+    private UserRepository userRepository;
     @Autowired
     private CartCountedItemsRepository cartCountedItemsRepository;
     @Autowired
@@ -91,10 +98,86 @@ class EndpointsIntegrationTest {
     }
 
     @Test
+    void getItems_anonymous_hidesCartAndOrdersControls() {
+        itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
+
+        webTestClient.get()
+                .uri("/items")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).doesNotContain("href=\"/items/new\"");
+                    assertThat(html).doesNotContain("href=\"/cart/items\"");
+                    assertThat(html).doesNotContain("href=\"/orders\"");
+                    assertThat(html).doesNotContain("name=\"action\"");
+                    assertThat(html).contains("href=\"/login\"");
+                });
+    }
+
+    @WithMockUser(username = "user1")
+    @Test
+    void getItems_authenticated_showsCartAndOrdersControls() {
+        itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
+
+        webTestClient.get()
+                .uri("/items")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).contains("href=\"/items/new\"");
+                    assertThat(html).contains("href=\"/cart/items\"");
+                    assertThat(html).contains("href=\"/orders\"");
+                    assertThat(html).contains("value=\"PLUS\"");
+                    assertThat(html).contains("value=\"MINUS\"");
+                    assertThat(html).doesNotContain("href=\"/login\"");
+                });
+    }
+
+    @Test
+    void getItem_anonymous_hidesCartAndOrdersControls() {
+        var item = itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE)).block();
+
+        webTestClient.get()
+                .uri("/items/{id}", item.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).doesNotContain("href=\"/cart/items\"");
+                    assertThat(html).doesNotContain("href=\"/orders\"");
+                    assertThat(html).doesNotContain("name=\"action\"");
+                    assertThat(html).contains("href=\"/login\"");
+                });
+    }
+
+    @WithMockUser(username = "user1")
+    @Test
+    void getItem_authenticated_showsCartAndOrdersControls() {
+        var item = itemRepository.save(TestEntityFactory.item("Хлеб", BigDecimal.ONE)).block();
+
+        webTestClient.get()
+                .uri("/items/{id}", item.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).contains("href=\"/cart/items\"");
+                    assertThat(html).contains("href=\"/orders\"");
+                    assertThat(html).contains("value=\"PLUS\"");
+                    assertThat(html).doesNotContain("href=\"/login\"");
+                });
+    }
+
+    @WithMockUser(username = "user1")
+    @Test
     void postItems_addsItemToCart() {
         var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items")
                         .queryParam("id", item.getId())
                         .queryParam("action", "PLUS")
@@ -111,6 +194,7 @@ class EndpointsIntegrationTest {
                 .verifyComplete();
     }
 
+    @WithMockUser(username = "user1")
     @Test
     void getNewItem_returnsCreateForm() {
         webTestClient.get()
@@ -129,6 +213,7 @@ class EndpointsIntegrationTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user1")
     @Test
     void getCartItems_returnsCartPage() {
         webTestClient.get()
@@ -137,10 +222,13 @@ class EndpointsIntegrationTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user1")
     @Test
     void buy_createsOrder() {
         var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items")
                         .queryParam("id", item.getId())
                         .queryParam("action", "PLUS")
@@ -152,7 +240,9 @@ class EndpointsIntegrationTest {
                 .exchange()
                 .expectStatus().is3xxRedirection();
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri("/buy")
                 .exchange()
                 .expectStatus().is3xxRedirection()
@@ -163,10 +253,13 @@ class EndpointsIntegrationTest {
                 .verifyComplete();
     }
 
+    @WithMockUser(username = "user1")
     @Test
     void addToCart_afterOrder_addsItemToCartAgain() {
         var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items")
                         .queryParam("id", item.getId())
                         .queryParam("action", "PLUS")
@@ -175,11 +268,16 @@ class EndpointsIntegrationTest {
                         .queryParam("pageNumber", 1)
                         .queryParam("pageSize", 5)
                         .build())
+                .body(BodyInserters.empty())
                 .exchange()
                 .expectStatus().is3xxRedirection();
-        webTestClient.post().uri("/buy").exchange().expectStatus().is3xxRedirection();
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy").exchange().expectStatus().is3xxRedirection();
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items")
                         .queryParam("id", item.getId())
                         .queryParam("action", "PLUS")
@@ -192,13 +290,15 @@ class EndpointsIntegrationTest {
                 .expectStatus().is3xxRedirection();
 
         StepVerifier.create(
-                        cartRepository.findFirstBy()
+                        userRepository.findByUsername("user1")
+                                .flatMap(user -> cartRepository.findFirstByUserId(user.getId()))
                                 .flatMapMany(cart -> cartCountedItemsRepository.findByCartId(cart.getId()))
                 )
                 .expectNextCount(1)
                 .verifyComplete();
     }
 
+    @WithMockUser(username = "user1")
     @Test
     void getOrders_returnsOrdersPage() {
         webTestClient.get()
@@ -207,13 +307,18 @@ class EndpointsIntegrationTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user1")
     @Test
     void getOrders_afterSeveralPurchases_listsEveryOrder() {
         var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
         addItemToCart(item.getId());
-        webTestClient.post().uri("/buy").exchange().expectStatus().is3xxRedirection();
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy").exchange().expectStatus().is3xxRedirection();
         addItemToCart(item.getId());
-        webTestClient.post().uri("/buy").exchange().expectStatus().is3xxRedirection();
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy").exchange().expectStatus().is3xxRedirection();
 
         var orderIds = orderRepository.findAll().map(order -> order.getId()).collectList().block();
         assertThat(orderIds).hasSize(2);
@@ -229,8 +334,50 @@ class EndpointsIntegrationTest {
                 });
     }
 
+    @WithMockUser(username = "user1")
+    @Test
+    void getOrders_listsOnlyCurrentUserOrders() {
+        var item = itemRepository.save(TestEntityFactory.item("Молоко", BigDecimal.TEN)).block();
+        addItemToCart(item.getId());
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy").exchange().expectStatus().is3xxRedirection();
+        var ownOrderId = orderRepository.findAll().single().block().getId();
+        var foreignOrderId = saveOrderOf("user2");
+
+        webTestClient.get()
+                .uri("/orders")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(html -> {
+                    assertThat(html).contains("href=\"/orders/" + ownOrderId + "\"");
+                    assertThat(html).doesNotContain("href=\"/orders/" + foreignOrderId + "\"");
+                });
+    }
+
+    @WithMockUser(username = "user1")
+    @Test
+    void getOrder_ofAnotherUser_returnsNotFound() {
+        var foreignOrderId = saveOrderOf("user2");
+
+        webTestClient.get()
+                .uri("/orders/{id}", foreignOrderId)
+                .exchange()
+                .expectStatus().isNotFound();
+    }
+
+    private long saveOrderOf(String username) {
+        var user = userRepository.findByUsername(username).block();
+        var order = new Order();
+        order.setUserId(user.getId());
+        return orderRepository.save(order).block().getId();
+    }
+
     private void addItemToCart(long itemId) {
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items")
                         .queryParam("id", itemId)
                         .queryParam("action", "PLUS")
