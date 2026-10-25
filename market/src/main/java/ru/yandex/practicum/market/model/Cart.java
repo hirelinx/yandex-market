@@ -18,4 +18,6 @@ public non-sealed class Cart implements IEntity {
     @Column("id")
     private Long id;
 
+    @Column("user_id")
+    private Long userId;
 }

@@ -15,4 +15,7 @@ public non-sealed class Order implements IEntity {
     @Id
     @Column("id")
     private Long id;
+
+    @Column("user_id")
+    private Long userId;
 }
