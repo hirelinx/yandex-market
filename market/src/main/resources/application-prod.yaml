@@ -15,3 +15,11 @@ spring:
 
 app:
   uploadsDir: ${UP_DIR}
+  users:
+    - username: ${USER1_NAME:user1}
+      password-hash: ${USER1_PASSWORD_HASH}
+    - username: ${USER2_NAME:user2}
+      password-hash: ${USER2_PASSWORD_HASH}
+  seller-user:
+    username: ${SELLER_NAME:seller}
+    password-hash: ${SELLER_PASSWORD_HASH}
