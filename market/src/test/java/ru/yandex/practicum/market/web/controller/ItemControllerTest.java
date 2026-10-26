@@ -3,12 +3,16 @@ package ru.yandex.practicum.market.web.controller;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.market.config.WebFluxSecurityTestConfig;
 import ru.yandex.practicum.market.dto.ItemDto;
 import ru.yandex.practicum.market.dto.ItemsAndPagingDto;
 import ru.yandex.practicum.market.service.CartService;
@@ -22,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(ItemController.class)
+@Import(WebFluxSecurityTestConfig.class)
 class ItemControllerTest {
     @Autowired
     private WebTestClient webTestClient;
@@ -30,6 +35,7 @@ class ItemControllerTest {
     @MockitoBean
     private CartService cartService;
 
+    @WithMockUser(username = "user")
     @Test
     void getItems_returnsItemsView() {
         when(itemService.search(any(), any()))
@@ -41,11 +47,14 @@ class ItemControllerTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user")
     @Test
     void postItems_plusAction_redirectsToItems() {
         when(cartService.addToCart(1L)).thenReturn(Mono.just(true));
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items")
                         .queryParam("id", 1)
                         .queryParam("action", "PLUS")
@@ -61,6 +70,7 @@ class ItemControllerTest {
         verify(cartService).addToCart(1L);
     }
 
+    @WithMockUser(username = "user")
     @Test
     void getNewItem_returnsFormView() {
         webTestClient.get()
@@ -69,6 +79,7 @@ class ItemControllerTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user")
     @Test
     void postNewItem_validRequest_redirectsToItemPage() {
         when(itemService.create(any(), any()))
@@ -80,7 +91,9 @@ class ItemControllerTest {
         builder.part("description", "desc");
         builder.part("price", "10.00");
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri("/items/new")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .bodyValue(builder.build())
@@ -100,11 +113,14 @@ class ItemControllerTest {
                 .expectStatus().isOk();
     }
 
+    @WithMockUser(username = "user")
     @Test
     void postItem_minusAction_redirectsToItemPage() {
         when(cartService.removeFromCart(3L)).thenReturn(Mono.just(true));
 
-        webTestClient.post()
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post()
                 .uri(uriBuilder -> uriBuilder.path("/items/3").queryParam("action", "MINUS").build())
                 .exchange()
                 .expectStatus().is3xxRedirection()

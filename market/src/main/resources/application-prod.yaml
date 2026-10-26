@@ -12,6 +12,27 @@ spring:
     user: ${DB_USER}
     password: ${DB_PASS}
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-secret: ${CLIENT_TOKEN}
+        provider:
+          keycloak:
+            token-uri: ${KEYCLOAK_URL}/realms/market-app/protocol/openid-connect/token
+
+application:
+  pay:
+    base-url: ${PAY_BASE_URL}
 
 app:
   uploadsDir: ${UP_DIR}
+  users:
+    - username: ${USER1_NAME:user1}
+      password-hash: ${USER1_PASSWORD_HASH}
+    - username: ${USER2_NAME:user2}
+      password-hash: ${USER2_PASSWORD_HASH}
+  seller-user:
+    username: ${SELLER_NAME:seller}
+    password-hash: ${SELLER_PASSWORD_HASH}

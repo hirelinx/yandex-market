@@ -2,10 +2,24 @@ spring:
   application:
     name: market-app
 
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            # Должно совпадать с oauth2Client.setDefaultClientRegistrationId
+            provider: keycloak
+            client-id: market-service
+            client-secret: ${CLIENT_TOKEN:Myjn723fQKKE8jAvT3ZGpqqGp9hFnMWHZYoxQWEqebz6wIpQh7qWpU00wcHR4ubfL5SJamizJrjSC8FKQUbalv}
+            authorization-grant-type: client_credentials
+            scope: openid
+        provider:
+          keycloak:
+            # token-uri вместо issuer-uri: для client_credentials больше ничего не нужно,
+            # и приложение не обращается к Keycloak при старте
+            token-uri: ${KEYCLOAK_URL:http://localhost:8082}/realms/market-app/protocol/openid-connect/token
+
 
 application:
   pay:
     base-url: ${PAY_BASE_URL:http://localhost:8081}
-    customer-account-id: ${PAY_CUSTOMER_ACCOUNT_ID:1}
-    seller-account-id: ${PAY_SELLER_ACCOUNT_ID:2}
-

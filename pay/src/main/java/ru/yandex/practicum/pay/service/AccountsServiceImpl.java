@@ -1,6 +1,7 @@
 package ru.yandex.practicum.pay.service;
 
-import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -15,13 +16,27 @@ import ru.yandex.practicum.pay.repository.AccountsRepository;
 import java.math.BigDecimal;
 
 @Service
-@AllArgsConstructor
 public class AccountsServiceImpl implements AccountsService {
     private final AccountsRepository accountsRepository;
+    private final BigDecimal initialBalance;
+
+    public AccountsServiceImpl(AccountsRepository accountsRepository,
+                               @Value("${application.init-balance}") BigDecimal initialBalance) {
+        this.accountsRepository = accountsRepository;
+        this.initialBalance = initialBalance;
+    }
+
     @Override
     public Mono<BigDecimal> getBalance(Integer accountId) {
-        return accountsRepository.findById(accountId).map(Account::getBalance)
-                .switchIfEmpty(Mono.error(new AccountNotFoundException("Account not found: " + accountId)));
+        return accountsRepository.findById(accountId)
+                .switchIfEmpty(Mono.defer(() -> createAccount(accountId)))
+                .map(Account::getBalance);
+    }
+
+    private Mono<Account> createAccount(Integer accountId) {
+        return accountsRepository.insert(accountId, initialBalance)
+                .onErrorResume(DataIntegrityViolationException.class, ex -> Mono.empty())
+                .then(Mono.defer(() -> accountsRepository.findById(accountId)));
     }
 
     @Override

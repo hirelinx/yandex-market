@@ -8,5 +8,5 @@ import ru.yandex.practicum.market.model.Cart;
 
 @Repository
 public interface CartRepository extends R2dbcRepository<@NonNull Cart,@NonNull  Long> {
-    Mono<@NonNull Cart> findFirstBy();
+    Mono<@NonNull Cart> findFirstByUserId(@NonNull Long userId);
 }

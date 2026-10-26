@@ -8,12 +8,28 @@ spring:
     user: sa
     password:
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-secret: test-secret
+        provider:
+          keycloak:
+            token-uri: http://localhost:18082/realms/market-app/protocol/openid-connect/token
 
 app:
   uploadsDir: ${java.io.tmpdir}/market-test-uploads/
+  users:
+    - username: user1
+      password-hash: $2a$10$SerGkqnGbG3rcw7GTBfiremT9zoxLqgeynLZ.XF9GNy72nzirzzrW
+    - username: user2
+      password-hash: $2a$10$SerGkqnGbG3rcw7GTBfiremT9zoxLqgeynLZ.XF9GNy72nzirzzrW
+  seller-user:
+    username: seller
+    password-hash: $2a$10$SerGkqnGbG3rcw7GTBfiremT9zoxLqgeynLZ.XF9GNy72nzirzzrW
 
 application:
   pay:
     base-url: http://localhost:18081
-    customer-account-id: 1
-    seller-account-id: 2
+

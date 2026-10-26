@@ -7,6 +7,7 @@ import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import ru.yandex.practicum.market.config.AppProperties;
 import ru.yandex.practicum.market.exception.NoSuchFileException;
 
 import java.io.IOException;
@@ -19,8 +20,8 @@ public class FilesServiceImpl implements FilesService {
 
     private final Path uploadsDir;
 
-    public FilesServiceImpl(@Value("${app.uploadsDir}") String uploadsDir) {
-        this.uploadsDir = Paths.get(uploadsDir);
+    public FilesServiceImpl(AppProperties appProperties) {
+        this.uploadsDir = Paths.get(appProperties.uploadsDir());
 
         try {
             Files.createDirectories(this.uploadsDir);
